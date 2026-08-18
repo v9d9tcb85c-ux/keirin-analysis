@@ -1,0 +1,9 @@
+{
+  "name": "WINTICKET 今日の該当レース",
+  "short_name": "今日検索",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07111f",
+  "theme_color": "#07111f",
+  "description": "F2・指定ライン・◎〇△/◎〇×を全場自動検索"
+}
