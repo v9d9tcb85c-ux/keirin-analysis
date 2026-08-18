@@ -3,7 +3,7 @@ from flask import Flask, jsonify, send_from_directory
 from pathlib import Path
 import threading
 import time
-from scraper import scan_today
+from engine import scan_today
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC = BASE_DIR / "static"
