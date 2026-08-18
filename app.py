@@ -6,7 +6,7 @@ import time
 from engine import scan_today
 
 BASE_DIR = Path(__file__).resolve().parent
-STATIC = BASE_DIR / "static"
+STATIC = BASE_DIR
 app = Flask(__name__, static_folder=str(STATIC), static_url_path="")
 
 lock = threading.Lock()
