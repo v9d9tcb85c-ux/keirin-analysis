@@ -1,50 +1,49 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, jsonify, send_from_directory, make_response, Response
 from pathlib import Path
-import os
 import threading
 import time
 
 from engine import scan_today
 
-APP_VERSION = "v2.6-auto-browser"
+APP_VERSION = "mobile-new-v1"
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
-
 lock = threading.Lock()
-state = {
-    "running": False,
-    "phase": "idle",
-    "current": "",
-    "done": 0,
-    "total": 0,
-    "last_update": 0,
-    "date": "",
-    "matches": [],
-    "unpublished": [],
-    "checked_races": 0,
-    "stage_stats": {},
-    "errors": [],
-    "message": "",
+stop_event = threading.Event()
+
+EMPTY_COUNTERS = {
+    "venues_found":0,"f2_venues":0,"f1_venues":0,"other_venues":0,
+    "checked_races":0,"girls_l":0,"non_f2_races":0,"f2_races":0,
+    "star2":0,"line_target":0,"order_target":0,"matched":0,"errors":0,
 }
-CACHE_SECONDS = 600
+
+state = {
+    "running":False,
+    "phase":"idle",
+    "current":"",
+    "detail":"",
+    "last_update":0,
+    "matches":[],
+    "errors":[],
+    "skipped":[],
+    "counters":dict(EMPTY_COUNTERS),
+    "message":"",
+}
 
 
-def _no_cache(response):
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
+def _no_cache(r):
+    r.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
+    r.headers["Pragma"]="no-cache"
+    r.headers["Expires"]="0"
+    return r
 
 
-def update_progress(progress):
-    if not isinstance(progress, dict):
-        return
+def progress_update(p):
     with lock:
-        state["phase"] = progress.get("phase", state["phase"])
-        state["current"] = progress.get("current", state["current"])
-        state["done"] = progress.get("done", state["done"])
-        state["total"] = progress.get("total", state["total"])
+        state["phase"]=p.get("phase",state["phase"])
+        state["current"]=p.get("current",state["current"])
+        state["detail"]=p.get("detail",state["detail"])
 
 
 def run_scan():
@@ -52,128 +51,127 @@ def run_scan():
         if state["running"]:
             return
         state.update({
-            "running": True,
-            "phase": "starting",
-            "current": "準備中",
-            "done": 0,
-            "total": 0,
-            "message": "",
-            "errors": [],
+            "running":True,
+            "phase":"starting",
+            "current":"検索準備中",
+            "detail":"",
+            "last_update":0,
+            "matches":[],
+            "errors":[],
+            "skipped":[],
+            "counters":dict(EMPTY_COUNTERS),
+            "message":"",
         })
-
-    print(f"[APP] START {APP_VERSION}", flush=True)
+        stop_event.clear()
 
     try:
-        result = scan_today(update_progress)
-        if not isinstance(result, dict):
-            raise RuntimeError("engine.scan_today() returned invalid result")
-
+        result=scan_today(progress_update,stop_event)
         with lock:
-            state["date"] = result.get("date", "")
-            state["matches"] = result.get("matches", [])
-            state["unpublished"] = result.get("unpublished", [])
-            state["checked_races"] = result.get("checked_races", 0)
-            state["stage_stats"] = result.get("stage_stats", {})
-            state["errors"] = result.get("errors", [])
-            state["last_update"] = int(time.time())
-            state["phase"] = "done"
-            state["current"] = "完了"
-            ss = state.get("stage_stats", {})
-            state["message"] = (
-                f"確認{state['checked_races']} / F2 {ss.get('f2',0)} / "
-                f"星2 {ss.get('star2',0)} / ライン {ss.get('line_target',0)} / "
-                f"印 {ss.get('order_target',0)} / 該当 {len(state['matches'])}"
-            )
+            state["matches"]=result.get("matches",[])
+            state["errors"]=result.get("errors",[])
+            state["skipped"]=result.get("skipped",[])
+            state["counters"]=result.get("counters",dict(EMPTY_COUNTERS))
+            state["last_update"]=int(time.time())
 
-        print(
-            f"[APP] DONE checked={state['checked_races']} "
-            f"matches={len(state['matches'])} "
-            f"unpublished={len(state['unpublished'])} "
-            f"errors={len(state['errors'])}",
-            flush=True,
-        )
+            if result.get("stopped"):
+                state["phase"]="stopped"
+                state["current"]="途中停止"
+                state["message"]="途中停止しました。終了でリセットできます。"
+            else:
+                state["phase"]="done"
+                state["current"]="検索完了"
+                state["message"]=f"該当 {len(state['matches'])}件"
 
-    except Exception as exc:
-        print(f"[APP] SCAN_ERROR {type(exc).__name__}: {exc}", flush=True)
+    except Exception as e:
         with lock:
-            state["phase"] = "error"
-            state["current"] = "エラー"
-            state["message"] = f"{type(exc).__name__}: {exc}"
-            state["errors"] = [state["message"]]
-
+            state["phase"]="error"
+            state["current"]="エラー"
+            state["message"]=f"{type(e).__name__}: {e}"
+            state["errors"].append(state["message"])
     finally:
         with lock:
-            state["running"] = False
-
-
-def start_scan(force=False):
-    with lock:
-        if state["running"]:
-            return False, "running"
-        fresh = bool(
-            state["last_update"]
-            and (time.time() - state["last_update"] < CACHE_SECONDS)
-        )
-
-    if fresh and not force:
-        return False, "fresh"
-
-    threading.Thread(target=run_scan, daemon=True).start()
-    return True, "started"
+            state["running"]=False
 
 
 @app.route("/")
 def index():
-    return _no_cache(make_response(send_from_directory(BASE_DIR, "index.html")))
+    return _no_cache(make_response(send_from_directory(BASE_DIR,"index.html")))
 
 
 @app.route("/api/status")
 def api_status():
     with lock:
-        data = dict(state)
-    data["app_version"] = APP_VERSION
+        data=dict(state)
+    data["app_version"]=APP_VERSION
     return _no_cache(jsonify(data))
 
 
-@app.route("/api/search", methods=["POST"])
-def api_search():
-    started, reason = start_scan(force=True)
-    return _no_cache(jsonify({"started": started, "reason": reason, "app_version": APP_VERSION}))
+@app.route("/api/start",methods=["POST"])
+def api_start():
+    with lock:
+        if state["running"]:
+            return _no_cache(jsonify({"ok":False,"reason":"running"}))
+    threading.Thread(target=run_scan,daemon=True,name="winticket-search").start()
+    return _no_cache(jsonify({"ok":True}))
 
 
-@app.route("/api/auto", methods=["POST"])
-def api_auto():
-    started, reason = start_scan(force=False)
-    return _no_cache(jsonify({"started": started, "reason": reason, "app_version": APP_VERSION}))
+@app.route("/api/stop",methods=["POST"])
+def api_stop():
+    with lock:
+        running=state["running"]
+    if running:
+        stop_event.set()
+    return _no_cache(jsonify({"ok":True,"running":running}))
+
+
+@app.route("/api/reset",methods=["POST"])
+def api_reset():
+    with lock:
+        if state["running"]:
+            return _no_cache(jsonify({"ok":False,"reason":"running"}))
+        state.update({
+            "running":False,
+            "phase":"idle",
+            "current":"",
+            "detail":"",
+            "last_update":0,
+            "matches":[],
+            "errors":[],
+            "skipped":[],
+            "counters":dict(EMPTY_COUNTERS),
+            "message":"",
+        })
+        stop_event.clear()
+    return _no_cache(jsonify({"ok":True}))
 
 
 @app.route("/health")
 def health():
     with lock:
-        running = state["running"]
-    return _no_cache(jsonify({"ok": True, "running": running, "app_version": APP_VERSION}))
-
-
-@app.route("/sw.js")
-def cleanup_sw():
-    js = 'self.addEventListener("install", event => self.skipWaiting());\nself.addEventListener("activate", event => {\n  event.waitUntil((async () => {\n    const keys = await caches.keys();\n    await Promise.all(keys.map(k => caches.delete(k)));\n    await self.registration.unregister();\n    const clients = await self.clients.matchAll({type:"window"});\n    for (const client of clients) client.navigate(client.url);\n  })());\n});'
-    response = Response(js, mimetype="application/javascript")
-    response.headers["Service-Worker-Allowed"] = "/"
-    return _no_cache(response)
+        running=state["running"]
+    return jsonify({"ok":True,"running":running,"version":APP_VERSION})
 
 
 @app.route("/manifest.webmanifest")
 def manifest():
     return _no_cache(jsonify({
-        "name": "WINTICKET 今日の該当レース",
-        "short_name": "今日検索",
-        "start_url": "/",
-        "display": "browser",
-        "background_color": "#07111f",
-        "theme_color": "#07111f",
+        "name":"WINTICKET 今日の買い目",
+        "short_name":"今日の買い目",
+        "start_url":"/",
+        "display":"standalone",
+        "background_color":"#06101d",
+        "theme_color":"#06101d",
     }))
 
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "10000"))
-    app.run(host="0.0.0.0", port=port)
+@app.route("/sw.js")
+def sw():
+    js='self.addEventListener("install",e=>self.skipWaiting());self.addEventListener("activate",e=>{e.waitUntil(self.clients.claim())});'
+    r=Response(js,mimetype="application/javascript")
+    r.headers["Service-Worker-Allowed"]="/"
+    return _no_cache(r)
+
+
+if __name__=="__main__":
+    import os
+    app.run(host="0.0.0.0",port=int(os.environ.get("PORT","10000")))
