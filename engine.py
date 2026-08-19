@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION = "mobile-simple-v2.5-venue-once"
+ENGINE_VERSION = "mobile-simple-v2.5.3-diagnostic-logs"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -34,6 +34,18 @@ class StopRequested(Exception):
 
 def _log(msg):
     print(f"[WINTICKET] {msg}", flush=True)
+
+
+def _log_race(venue, race, event, **kwargs):
+    extra=" ".join(f"{k}={v}" for k,v in kwargs.items() if v not in (None,""))
+    suffix=(" "+extra) if extra else ""
+    _log(f"RACE venue={venue} race={race}R event={event}{suffix}")
+
+
+def _log_venue(venue, event, **kwargs):
+    extra=" ".join(f"{k}={v}" for k,v in kwargs.items() if v not in (None,""))
+    suffix=(" "+extra) if extra else ""
+    _log(f"VENUE venue={venue} event={event}{suffix}")
 
 
 def _today_jst():
@@ -108,6 +120,7 @@ def goto(page, url, stop_event=None):
             raise RuntimeError("ページ本文を取得できません")
         except Exception as e:
             last = e
+            _log(f"GOTO_FAIL attempt={attempt+1}/{MAX_RETRIES} url={url} error={type(e).__name__}:{e}")
             if attempt < MAX_RETRIES - 1:
                 time.sleep(0.5)
     raise last
@@ -437,6 +450,7 @@ def scan_today(progress=None, stop_event=None):
 
     try:
         _check_stop(stop_event)
+        _log(f"SCAN_START version={ENGINE_VERSION} date={today.isoformat()}")
 
         # 検索1回につきChromium起動は1回だけ。
         with sync_playwright() as p:
@@ -459,6 +473,7 @@ def scan_today(progress=None, stop_event=None):
 
             venues=discover_today_venues(page,today,stop_event)
             counters["venues_found"]=len(venues)
+            _log(f"VENUES_FOUND count={len(venues)} names={','.join(v for v,_ in venues)}")
             _progress(
                 progress, counters,
                 phase="venues",
@@ -468,6 +483,7 @@ def scan_today(progress=None, stop_event=None):
 
             for vi,(venue,slug) in enumerate(venues,1):
                 _check_stop(stop_event)
+                _log_venue(venue, "START", index=f"{vi}/{len(venues)}", slug=slug)
 
                 _progress(
                     progress, counters,
@@ -482,13 +498,17 @@ def scan_today(progress=None, stop_event=None):
                     raise
                 except Exception as e:
                     counters["errors"]+=1
+                    _log_venue(venue, "ERROR_RACE_LIST", error=f"{type(e).__name__}:{e}")
                     result["errors"].append(
                         f"{venue}: 一覧取得 {type(e).__name__}: {e}"
                     )
                     continue
 
                 if not rows:
+                    _log_venue(venue, "NO_RACES")
                     continue
+
+                _log_venue(venue, "RACES_FOUND", count=len(rows), races=",".join(str(r["race"]) for r in rows))
 
                 # -----------------------------------------------------
                 # ① 場のクラス判定は1回だけ。
@@ -510,6 +530,7 @@ def scan_today(progress=None, stop_event=None):
 
                     # 一覧の局所情報でL級が確定していれば予想ページを開かず飛ばす。
                     hint=row.get("grade_hint") or ""
+                    _log_race(venue, race, "VENUE_GRADE_PROBE", hint=hint or "NONE")
                     if hint=="L":
                         counters["girls_l"]+=1
                         result["skipped"].append({
@@ -530,6 +551,7 @@ def scan_today(progress=None, stop_event=None):
                         counters["checked_races"]+=1
 
                         grade=hint or detect_grade_from_header(page,race)
+                        _log_race(venue, race, "VENUE_GRADE_RESULT", grade=grade or "UNKNOWN")
 
                         if grade=="L":
                             counters["girls_l"]+=1
@@ -552,6 +574,7 @@ def scan_today(progress=None, stop_event=None):
                         # 級がまだ読めない場合は次Rへ。
                         # AI未発表とガールズは混同しない。
                         counters["unpublished"]+=1
+                        _log_race(venue, race, "VENUE_GRADE_UNKNOWN_SKIP")
                         result["skipped"].append({
                             "venue":venue,"race":race,"reason":"級/AI未発表"
                         })
@@ -573,6 +596,7 @@ def scan_today(progress=None, stop_event=None):
 
                 # 男子F1/F2を確定できなければ、その場はここで終了。
                 if venue_grade=="":
+                    _log_venue(venue, "GRADE_UNDECIDED")
                     result["skipped"].append({
                         "venue":venue,"reason":"場ランク未判定"
                     })
@@ -581,6 +605,7 @@ def scan_today(progress=None, stop_event=None):
                 # F1なら場ごと即終了。
                 if venue_grade=="F1":
                     counters["f1_venues"]+=1
+                    _log_venue(venue, "GRADE_CONFIRMED", grade="F1", action="SKIP_VENUE")
                     result["skipped"].append({
                         "venue":venue,"reason":"F1場を丸ごとパス"
                     })
@@ -594,6 +619,7 @@ def scan_today(progress=None, stop_event=None):
 
                 # F2はここで1回だけカウント。
                 counters["f2_venues"]+=1
+                _log_venue(venue, "GRADE_CONFIRMED", grade="F2", action="SCAN_RACES")
                 _progress(
                     progress, counters,
                     phase="venue_grade",
@@ -616,6 +642,7 @@ def scan_today(progress=None, stop_event=None):
                         if (row.get("grade_hint") or "")=="L":
                             continue
 
+                    _log_race(venue, race, "START")
                     _progress(
                         progress, counters,
                         phase="races",
@@ -626,6 +653,7 @@ def scan_today(progress=None, stop_event=None):
                     # 一覧でL級が確定していれば予想ページ不要。
                     hint=row.get("grade_hint") or ""
                     if hint=="L":
+                        _log_race(venue, race, "SKIP_L_GIRLS", source="grade_hint")
                         # 場判定前に既に数えたLは二重計上しない。
                         if not (probe_index is not None and idx < probe_index):
                             counters["girls_l"]+=1
@@ -652,6 +680,7 @@ def scan_today(progress=None, stop_event=None):
                         # F2場確定後も、レース固有のL級だけは毎R確認。
                         grade=hint or detect_grade_from_header(page,race)
                         if grade=="L":
+                            _log_race(venue, race, "SKIP_L_GIRLS", source="header")
                             counters["girls_l"]+=1
                             result["skipped"].append({
                                 "venue":venue,"race":race,"reason":"L級ガールズ"
@@ -678,6 +707,8 @@ def scan_today(progress=None, stop_event=None):
                             page.wait_for_timeout(250)
                             star,_=confidence_dom(page)
 
+                        _log_race(venue, race, "STAR_RESULT", star="UNPUBLISHED" if star is None else star)
+
                         if star is None:
                             counters["unpublished"]+=1
                             result["skipped"].append({
@@ -692,9 +723,11 @@ def scan_today(progress=None, stop_event=None):
                             continue
 
                         if star != TARGET_STAR:
+                            _log_race(venue, race, "SKIP_STAR", star=star)
                             continue
 
                         counters["star2"]+=1
+                        _log_race(venue, race, "PASS_STAR2")
                         _progress(
                             progress, counters,
                             phase="races",
@@ -703,10 +736,13 @@ def scan_today(progress=None, stop_event=None):
                         )
 
                         line,groups=extract_line(page,stop_event)
+                        _log_race(venue, race, "LINE_RESULT", line=line or "NONE")
                         if line not in TARGET_LINES:
+                            _log_race(venue, race, "SKIP_LINE", line=line or "NONE")
                             continue
 
                         counters["line_target"]+=1
+                        _log_race(venue, race, "PASS_LINE", line=line)
                         _progress(
                             progress, counters,
                             phase="races",
@@ -715,14 +751,19 @@ def scan_today(progress=None, stop_event=None):
                         )
 
                         hon,tai,ana,ren=extract_ai_marks(page)
+                        _log_race(venue, race, "MARKS_RESULT", hon=hon or "NONE", tai=tai or "NONE", ana=ana or "NONE", ren=ren or "NONE")
                         if hon in ("",None) or tai in ("",None):
+                            _log_race(venue, race, "SKIP_MARKS_MISSING")
                             continue
 
                         order3=three_line_order(groups,hon,tai,ana,ren)
+                        _log_race(venue, race, "ORDER3_RESULT", order3=order3 or "NONE")
                         if order3 not in TARGET_ORDERS:
+                            _log_race(venue, race, "SKIP_ORDER3", order3=order3 or "NONE")
                             continue
 
                         counters["order_target"]+=1
+                        _log_race(venue, race, "PASS_ORDER3", order3=order3)
 
                         result["matches"].append({
                             "venue":venue,
@@ -735,6 +776,7 @@ def scan_today(progress=None, stop_event=None):
                             "prediction_url":pred_url,
                         })
                         counters["matched"]+=1
+                        _log_race(venue, race, "MATCH", line=line, order3=order3)
 
                         _progress(
                             progress, counters,
@@ -747,12 +789,22 @@ def scan_today(progress=None, stop_event=None):
                         raise
                     except Exception as e:
                         counters["errors"]+=1
+                        _log_race(venue, race, "ERROR", error=f"{type(e).__name__}:{e}")
                         result["errors"].append(
                             f"{venue} {race}R: {type(e).__name__}: {e}"
                         )
                         continue
 
             result["matches"].sort(key=lambda x:(x["venue"],x["race"]))
+            _log(
+                "SCAN_DONE "
+                f"venues={counters['venues_found']} f2venues={counters['f2_venues']} "
+                f"f1venues={counters['f1_venues']} checked={counters['checked_races']} "
+                f"girls={counters['girls_l']} unpublished={counters['unpublished']} "
+                f"star2={counters['star2']} lines={counters['line_target']} "
+                f"orders={counters['order_target']} matches={counters['matched']} "
+                f"errors={counters['errors']}"
+            )
             _progress(
                 progress, counters,
                 phase="done",
@@ -763,6 +815,12 @@ def scan_today(progress=None, stop_event=None):
 
     except StopRequested:
         result["stopped"]=True
+        _log(
+            "SCAN_STOPPED "
+            f"checked={counters['checked_races']} girls={counters['girls_l']} "
+            f"unpublished={counters['unpublished']} star2={counters['star2']} "
+            f"matches={counters['matched']} errors={counters['errors']}"
+        )
         _progress(
             progress, counters,
             phase="stopped",
