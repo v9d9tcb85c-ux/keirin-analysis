@@ -1,3 +1,0 @@
-Flask>=3.0,<4
-gunicorn>=22,<24
-playwright>=1.50,<2
