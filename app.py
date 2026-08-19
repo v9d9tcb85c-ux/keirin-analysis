@@ -7,7 +7,7 @@ import json
 
 from engine import scan_today
 
-APP_VERSION = "mobile-simple-v2.5.4-fast-goto"
+APP_VERSION="mobile-simple-v2.5.5-integrated-fix"
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
 lock = threading.Lock()
@@ -49,7 +49,7 @@ def _clear_state_file():
 EMPTY_COUNTERS = {
     "venues_found":0,"f2_venues":0,"f1_venues":0,"other_venues":0,
     "checked_races":0,"girls_l":0,"unpublished":0,"non_f2_races":0,"f2_races":0,
-    "star2":0,"line_target":0,"order_target":0,"matched":0,"errors":0,
+    "star2":0,"line_target":0,"order_target":0,"matched":0,"errors":0,"duplicate_skips":0,
 }
 
 state = {
@@ -64,6 +64,8 @@ state = {
     "counters":dict(EMPTY_COUNTERS),
     "message":"",
     "finished_at":0,
+    "venue_index":0,
+    "venue_total":0,
 }
 
 _saved=_load_state_file()
@@ -87,6 +89,13 @@ def progress_update(p):
             merged=dict(state.get("counters") or EMPTY_COUNTERS)
             merged.update(p["counters"])
             state["counters"]=merged
+        if isinstance(p.get("matches"), list):
+            state["matches"]=p["matches"]
+        if "venue_index" in p:
+            state["venue_index"]=p.get("venue_index") or 0
+        if "venue_total" in p:
+            state["venue_total"]=p.get("venue_total") or 0
+        state["last_update"]=int(time.time())
         _save_state_file()
 
 
@@ -106,6 +115,8 @@ def run_scan():
             "counters":dict(EMPTY_COUNTERS),
             "message":"",
             "finished_at":0,
+            "venue_index":0,
+            "venue_total":0,
         })
         stop_event.clear()
         _save_state_file()
@@ -173,7 +184,14 @@ def api_stop():
         running=state["running"]
     if running:
         stop_event.set()
-    return _no_cache(jsonify({"ok":True,"running":running}))
+        with lock:
+            state["phase"]="stopping"
+            state["current"]="停止処理中"
+            state["detail"]="現在の通信を終え次第停止します。"
+            state["message"]="停止要求を受け付けました。"
+            state["last_update"]=int(time.time())
+            _save_state_file()
+    return _no_cache(jsonify({"ok":True,"running":running,"stop_requested":running}))
 
 
 @app.route("/api/reset",methods=["POST"])

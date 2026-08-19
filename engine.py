@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION = "mobile-simple-v2.5.4-fast-goto"
+ENGINE_VERSION="mobile-simple-v2.5.5-integrated-fix"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -105,65 +105,41 @@ def _body_text(page):
 
 def goto(page, url, stop_event=None):
     """
-    高速版:
-    - 通常待機は最大7秒
-    - timeoutでも本文が取れていれば成功扱い
-    - 再試行は1回だけ、2回目は最大4秒
+    v2.5.5:
+    - 同じURLの自動再試行をしない（重複アクセス防止）
+    - 最大6秒。timeoutでも本文が取得済みなら成功扱い
+    - 前後で停止要求を確認
     """
-    last = None
-    timeouts = (7000, 4000)
-
-    for attempt, timeout_ms in enumerate(timeouts, 1):
+    _check_stop(stop_event)
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=6000)
+        _check_stop(stop_event)
+        page.wait_for_timeout(100)
+        _check_stop(stop_event)
+        body = _body_text(page)
+        if body:
+            return body
+        raise RuntimeError("ページ本文を取得できません")
+    except StopRequested:
+        raise
+    except Exception as e:
         _check_stop(stop_event)
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            page.wait_for_timeout(120)
             body = _body_text(page)
-            if body:
-                if attempt > 1:
-                    _log(f"GOTO_RECOVERED attempt={attempt}/2 url={url}")
-                return body
-
-            # DOMContentLoaded後に本文がまだ空なら短く待つ
-            page.wait_for_timeout(180)
-            body = _body_text(page)
-            if body:
-                return body
-
-            raise RuntimeError("ページ本文を取得できません")
-
-        except Exception as e:
-            last = e
-
-            # timeoutでも、途中まで描画済みならそのまま使う
-            try:
-                body = _body_text(page)
-            except Exception:
-                body = ""
-
-            if body:
-                _log(
-                    f"GOTO_PARTIAL_OK attempt={attempt}/2 "
-                    f"timeout_ms={timeout_ms} url={url} "
-                    f"error={type(e).__name__}:{e}"
-                )
-                return body
-
+        except Exception:
+            body = ""
+        if body:
             _log(
-                f"GOTO_FAIL attempt={attempt}/2 "
-                f"timeout_ms={timeout_ms} url={url} "
-                f"error={type(e).__name__}:{e}"
+                f"GOTO_PARTIAL_OK attempt=1/1 timeout_ms=6000 "
+                f"url={url} error={type(e).__name__}:{e}"
             )
+            return body
+        _log(
+            f"GOTO_FAIL attempt=1/1 timeout_ms=6000 "
+            f"url={url} error={type(e).__name__}:{e}"
+        )
+        raise
 
-            if attempt < len(timeouts):
-                # 重いページを引きずらない
-                try:
-                    page.evaluate("window.stop()")
-                except Exception:
-                    pass
-                time.sleep(0.25)
-
-    raise last
 def parse_grade(text):
     """
     小さい局所テキスト専用。
@@ -473,6 +449,7 @@ def scan_today(progress=None, stop_event=None):
         "order_target":0,
         "matched":0,
         "errors":0,
+        "duplicate_skips":0,
     }
 
     result={
@@ -485,6 +462,8 @@ def scan_today(progress=None, stop_event=None):
     }
 
     browser=context=page=None
+    visited_prediction_urls=set()
+    cached_prediction_bodies={}
 
     try:
         _check_stop(stop_event)
@@ -527,7 +506,10 @@ def scan_today(progress=None, stop_event=None):
                     progress, counters,
                     phase="venue_list",
                     current=f"{venue} ({vi}/{len(venues)})",
-                    detail="今日のレース一覧を取得"
+                    detail=f"全{len(venues)}場中 {vi}場目：今日のレース一覧を取得",
+                    venue_index=vi,
+                    venue_total=len(venues),
+                    matches=list(result["matches"]),
                 )
 
                 try:
@@ -585,9 +567,16 @@ def scan_today(progress=None, stop_event=None):
                     pred_url=f"{BASE}/keirin/{slug}/predictions/{row['sid']}/{row['day']}/{race}"
 
                     try:
-                        goto(page,pred_url,stop_event)
-                        counters["checked_races"]+=1
-
+                        if pred_url in visited_prediction_urls:
+                            counters["duplicate_skips"]+=1
+                            _log_race(venue, race, "DUPLICATE_SKIP", url=pred_url)
+                        else:
+                            (
+                            None if pred_url in visited_prediction_urls
+                            else (goto(page,pred_url,stop_event), visited_prediction_urls.add(pred_url), counters.__setitem__("checked_races", counters["checked_races"]+1))[0]
+                        )
+                            visited_prediction_urls.add(pred_url)
+    
                         grade=hint or detect_grade_from_header(page,race)
                         _log_race(venue, race, "VENUE_GRADE_RESULT", grade=grade or "UNKNOWN")
 
@@ -712,9 +701,11 @@ def scan_today(progress=None, stop_event=None):
                         # 場判定に使った同じレースだけは既にページが開いている可能性が高い。
                         # それ以外は予想ページへ移動。
                         if idx != probe_index:
-                            goto(page,pred_url,stop_event)
-                            counters["checked_races"]+=1
-
+                            (
+                            None if pred_url in visited_prediction_urls
+                            else (goto(page,pred_url,stop_event), visited_prediction_urls.add(pred_url), counters.__setitem__("checked_races", counters["checked_races"]+1))[0]
+                        )
+    
                         # F2場確定後も、レース固有のL級だけは毎R確認。
                         grade=hint or detect_grade_from_header(page,race)
                         if grade=="L":
@@ -820,7 +811,10 @@ def scan_today(progress=None, stop_event=None):
                             progress, counters,
                             phase="races",
                             current=f"{venue} {race}R",
-                            detail="条件一致 → 該当レースに追加"
+                            detail="条件一致 → 該当レースに追加",
+                            matches=list(result["matches"]),
+                            venue_index=vi,
+                            venue_total=len(venues),
                         )
 
                     except StopRequested:

@@ -114,7 +114,7 @@ button:disabled{opacity:.45}
     <div class="steps">
       <div class="step"><b id="checkedStat">0</b><span>確認レース</span></div>
       <div class="step"><b id="unpublishedStat">0</b><span>AI未発表</span></div>
-      <div class="step"><b id="starStat">0</b><span>星2</span></div>
+      <div class="step"><b id="starStat">0</b><span>星2通過</span></div>
       <div class="step"><b id="lineStat">0</b><span>指定ライン</span></div>
       <div class="step"><b id="orderStat">0</b><span>印条件</span></div>
     </div>
@@ -146,7 +146,7 @@ button:disabled{opacity:.45}
 </div>
 
 <script>
-const STORAGE_KEY="winticket-mobile-v2.4-last-state";
+const STORAGE_KEY="winticket-mobile-v2.5.5-last-state";
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]||m))}
 function fmt(ts){if(!ts)return "未検索";return new Date(ts*1000).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}
@@ -213,6 +213,7 @@ function phaseName(p,running){
     if(p==="done")return "検索完了";
     if(p==="stopped")return "途中停止";
     if(p==="error")return "エラー";
+    if(p==="stopping")return "停止処理中";
     return "待機中";
   }
   return ({
