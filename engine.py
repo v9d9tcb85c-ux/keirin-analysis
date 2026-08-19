@@ -51,56 +51,20 @@ def _check_stop(stop_event):
 
 
 def ensure_browser(progress=None):
-    """RenderでChromiumが無い場合だけ自動インストール。"""
+    """検索時はChromiumの存在確認だけ。インストールはRenderのBuild時に行う。"""
     global _BROWSER_READY
     if _BROWSER_READY:
         return True
-
-    with _BROWSER_LOCK:
-        if _BROWSER_READY:
+    try:
+        with sync_playwright() as p:
+            exe = p.chromium.executable_path
+        if exe and Path(exe).exists():
+            _BROWSER_READY = True
+            _log(f"BROWSER_OK {exe}")
             return True
-
-        if progress:
-            progress({"phase":"browser","current":"Chromium確認中"})
-
-        try:
-            with sync_playwright() as p:
-                exe = p.chromium.executable_path
-            if exe and Path(exe).exists():
-                _BROWSER_READY = True
-                _log(f"BROWSER_OK {exe}")
-                return True
-        except Exception as e:
-            _log(f"BROWSER_CHECK {type(e).__name__}: {e}")
-
-        if progress:
-            progress({"phase":"browser","current":"Chromiumを準備中"})
-
-        proc = subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=240,
-            check=False,
-        )
-        _log(f"BROWSER_INSTALL code={proc.returncode}")
-        if proc.returncode != 0:
-            _log((proc.stdout or "")[-4000:])
-            return False
-
-        try:
-            with sync_playwright() as p:
-                exe = p.chromium.executable_path
-            if exe and Path(exe).exists():
-                _BROWSER_READY = True
-                _log(f"BROWSER_INSTALLED {exe}")
-                return True
-        except Exception as e:
-            _log(f"BROWSER_RECHECK {type(e).__name__}: {e}")
-
+    except Exception as e:
+        _log(f"BROWSER_CHECK {type(e).__name__}: {e}")
     return False
-
 
 def _browser_args():
     return [
@@ -138,17 +102,44 @@ def enable_fast_mode(context):
 
 
 def goto(page, url, stop_event=None):
+    """ページ取得。body待ちで全検索を落とさず、HTML/本文を段階的に回収する。"""
     last = None
-    for attempt in range(MAX_RETRIES):
+    for attempt in range(MAX_RETRIES + 1):
         _check_stop(stop_event)
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            page.wait_for_timeout(180)
-            return page.locator("body").inner_text(timeout=6000)
+            page.goto(url, wait_until="commit", timeout=18000)
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except Exception:
+                pass
+            page.wait_for_timeout(250 + attempt * 250)
+            try:
+                body = page.locator("body")
+                if body.count() > 0:
+                    txt = body.first.inner_text(timeout=2500)
+                    if txt.strip():
+                        return txt
+            except Exception:
+                pass
+            # bodyのinner_textが遅い/取れない場合でも、documentElementから救済。
+            try:
+                txt = page.evaluate("() => document.body?.innerText || document.documentElement?.innerText || ''") or ''
+                if txt.strip():
+                    return txt
+            except Exception:
+                pass
+            # 最後の救済: HTML自体が取れていれば返す。
+            html = page.content()
+            if html:
+                return html
+            raise RuntimeError("ページ本文を取得できませんでした")
         except Exception as e:
             last = e
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(0.6)
+            if attempt < MAX_RETRIES:
+                try:
+                    page.wait_for_timeout(500 + attempt * 500)
+                except Exception:
+                    time.sleep(0.5)
     raise last
 
 
@@ -576,7 +567,7 @@ def scan_today(progress=None, stop_event=None):
     try:
         _check_stop(stop_event)
         if not ensure_browser(progress):
-            raise RuntimeError("Chromiumの準備に失敗しました")
+            raise RuntimeError("Chromiumが見つかりません。Renderの再デプロイをしてください。")
 
         today=_today_jst()
         progress({"phase":"venues","current":"今日の開催場を確認中","detail":""})
