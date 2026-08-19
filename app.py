@@ -3,18 +3,52 @@ from flask import Flask, jsonify, send_from_directory, make_response, Response
 from pathlib import Path
 import threading
 import time
+import json
 
 from engine import scan_today
 
-APP_VERSION = "mobile-simple-v2.3-persistent"
+APP_VERSION = "mobile-simple-v2.4-midnight-fix"
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
 lock = threading.Lock()
 stop_event = threading.Event()
 
+STATE_FILE = Path("/tmp/winticket_mobile_state.json")
+
+def _save_state_file():
+    try:
+        tmp = STATE_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(STATE_FILE)
+    except Exception as e:
+        print(f"[APP] STATE_SAVE_ERROR {e}", flush=True)
+
+def _load_state_file():
+    try:
+        if not STATE_FILE.exists():
+            return None
+        data=json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return None
+        if data.get("running"):
+            data["running"]=False
+            data["phase"]="stopped"
+            data["current"]="検索中断"
+            data["message"]="Render再起動のため検索が中断しました。取得済み情報を保持しています。"
+        return data
+    except Exception as e:
+        print(f"[APP] STATE_LOAD_ERROR {e}", flush=True)
+        return None
+
+def _clear_state_file():
+    try:
+        STATE_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+
 EMPTY_COUNTERS = {
     "venues_found":0,"f2_venues":0,"f1_venues":0,"other_venues":0,
-    "checked_races":0,"girls_l":0,"non_f2_races":0,"f2_races":0,
+    "checked_races":0,"girls_l":0,"unpublished":0,"non_f2_races":0,"f2_races":0,
     "star2":0,"line_target":0,"order_target":0,"matched":0,"errors":0,
 }
 
@@ -31,6 +65,10 @@ state = {
     "message":"",
     "finished_at":0,
 }
+
+_saved=_load_state_file()
+if _saved:
+    state.update(_saved)
 
 
 def _no_cache(r):
@@ -49,6 +87,7 @@ def progress_update(p):
             merged=dict(state.get("counters") or EMPTY_COUNTERS)
             merged.update(p["counters"])
             state["counters"]=merged
+        _save_state_file()
 
 
 def run_scan():
@@ -69,6 +108,7 @@ def run_scan():
             "finished_at":0,
         })
         stop_event.clear()
+        _save_state_file()
 
     try:
         result=scan_today(progress_update,stop_event)
@@ -89,6 +129,7 @@ def run_scan():
                 state["phase"]="done"
                 state["current"]="検索完了"
                 state["message"]=f"該当 {len(state['matches'])}件"
+            _save_state_file()
 
     except Exception as e:
         with lock:
@@ -96,9 +137,11 @@ def run_scan():
             state["current"]="エラー"
             state["message"]=f"{type(e).__name__}: {e}"
             state["errors"].append(state["message"])
+            _save_state_file()
     finally:
         with lock:
             state["running"]=False
+            _save_state_file()
 
 
 @app.route("/")
@@ -152,6 +195,7 @@ def api_reset():
             "finished_at":0,
         })
         stop_event.clear()
+        _clear_state_file()
     return _no_cache(jsonify({"ok":True}))
 
 

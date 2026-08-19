@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION = "mobile-simple-v2.3-persistent"
+ENGINE_VERSION = "mobile-simple-v2.4-midnight-fix"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -115,25 +115,48 @@ def goto(page, url, stop_event=None):
 
 def parse_grade(text):
     """
-    レース固有のL級表示を最優先。
-    ページ内に開催全体のF2表記とL1が共存しても、L1をガールズとして扱う。
+    小さい局所テキスト専用。
+    L1/L級/ガールズをF1/F2より優先する。
+    ページ全体の本文には使わない。
     """
     if not text:
         return ""
 
-    # ガールズを最優先
     if re.search(r"(?<![A-Z0-9])L1(?![A-Z0-9])", text):
         return "L"
     if "L級" in text or "ガールズ" in text or "女子" in text:
         return "L"
 
-    # 男子開催ランク
     m = re.search(r"(?<![A-Z0-9])(F1|F2)(?![A-Z0-9])", text)
-    if m:
-        return m.group(1)
+    return m.group(1) if m else ""
 
+
+def detect_grade_from_header(page, race_no):
+    """
+    予想ページ全体ではなく、画面上部のレース見出し周辺だけで級を判定。
+    未発表ページ内の別レース/ナビゲーションにあるL1を誤取得しない。
+    """
+    try:
+        texts = page.evaluate("""(raceNo)=>{
+          const out=[];
+          const nodes=[...document.querySelectorAll('h1,h2,h3,[class*="Header"],[class*="Title"],[class*="RaceInfo"],[class*="RaceHeader"]')];
+          for(const e of nodes){
+            const t=(e.innerText||'').trim();
+            if(!t || t.length>260) continue;
+            if(t.includes(String(raceNo)+'R') || /(?:F1|F2|L1|L級|ガールズ)/.test(t)){
+              out.push(t);
+            }
+            if(out.length>=20) break;
+          }
+          return out;
+        }""", race_no)
+        for t in texts or []:
+            g=parse_grade(t)
+            if g:
+                return g
+    except Exception:
+        pass
     return ""
-
 
 def confidence_dom(page):
     loc = page.locator('[aria-label*="3点中"]')
@@ -336,19 +359,44 @@ def get_today_races(page, slug, today, stop_event):
     seen=set()
     links=page.locator("a[href*='/raceresult/']")
     for i in range(links.count()):
-        href=links.nth(i).get_attribute("href") or ""
+        link=links.nth(i)
+        href=link.get_attribute("href") or ""
         info=race_info(href)
-        if not info: continue
+        if not info:
+            continue
         sid,day_no,race_no,actual=info
-        if actual != today: continue
+        if actual != today:
+            continue
         key=(sid,day_no,race_no)
-        if key in seen: continue
+        if key in seen:
+            continue
         seen.add(key)
-        rows.append({"sid":sid,"day":day_no,"race":race_no})
+
+        local_text=""
+        try:
+            local_text=link.evaluate("""e=>{
+              let n=e;
+              for(let k=0;k<6 && n;k++,n=n.parentElement){
+                const t=(n.innerText||'').trim();
+                if(t && t.length<=320 && (t.includes('R') || /F1|F2|L1|L級|ガールズ/.test(t))){
+                  return t;
+                }
+              }
+              return (e.innerText||'').trim();
+            }""") or ""
+        except Exception:
+            pass
+
+        rows.append({
+            "sid":sid,
+            "day":day_no,
+            "race":race_no,
+            "grade_hint":parse_grade(local_text),
+            "grade_source":local_text[:240],
+        })
+
     rows.sort(key=lambda x:x["race"])
     return rows
-
-
 
 def _progress(progress, counters, **kw):
     payload=dict(kw)
@@ -367,6 +415,7 @@ def scan_today(progress=None, stop_event=None):
         "f1_venues":0,
         "checked_races":0,
         "girls_l":0,
+        "unpublished":0,
         "f2_races":0,
         "star2":0,
         "line_target":0,
@@ -455,13 +504,15 @@ def scan_today(progress=None, stop_event=None):
                             detail="L級 / F1 / F2 を確認中"
                         )
 
-                        grade=parse_grade(body)
+                        # まず一覧ページのレース局所情報を使う。
+                        # 取れない場合だけ予想ページ上部の見出し周辺で補完する。
+                        grade=row.get("grade_hint") or detect_grade_from_header(page, race)
 
-                        # L級はそのレースだけ即パス。
+                        # L級は確実な局所情報で確認できた時だけガールズ扱い。
                         if grade=="L":
                             counters["girls_l"]+=1
                             result["skipped"].append({"venue":venue,"race":race,"reason":"L級ガールズ"})
-                            _progress(progress, counters, phase="races", current=f"{venue} {race}R", detail="L級ガールズ → パス")
+                            _progress(progress, counters, phase="races", current=f"{venue} {race}R", detail="L1/L級を確認 → ガールズとしてパス")
                             continue
 
                         # 最初の男子レースでF1/F2を確定。
@@ -493,6 +544,14 @@ def scan_today(progress=None, stop_event=None):
                         if star is None:
                             page.wait_for_timeout(250)
                             star,_=confidence_dom(page)
+
+                        # AI予想が未発表ならガールズ扱いせず「未発表」で即パス。
+                        if star is None:
+                            counters["unpublished"]+=1
+                            result["skipped"].append({"venue":venue,"race":race,"reason":"AI予想未発表"})
+                            _progress(progress, counters, phase="races", current=f"{venue} {race}R", detail="AI予想未発表 → パス")
+                            continue
+
                         if star != TARGET_STAR:
                             continue
                         counters["star2"]+=1

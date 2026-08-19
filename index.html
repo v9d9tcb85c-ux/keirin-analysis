@@ -82,9 +82,9 @@ button:disabled{opacity:.45}
 <body>
 <main>
   <div class="top">
-    <div class="eyebrow">WINTICKET SMART FINDER ・ SIMPLE ENGINE v2.3.2</div>
+    <div class="eyebrow">WINTICKET SMART FINDER ・ SIMPLE ENGINE v2.4.2</div>
     <h1>今日の買い目</h1>
-    <div class="subtitle">開催場 → 今日のレース一覧 → 予想ページだけ。L級は即パス、F1は場ごと終了、F2だけ星2 → ライン → 印を確認します。</div>
+    <div class="subtitle">開催場 → 今日のレース一覧 → 予想ページだけ。L1/L級は確実な表示だけで判定し、AI未発表は未発表としてパス。F1は場ごと終了、F2だけ星2 → ライン → 印を確認します。</div>
   </div>
 
   <section class="hero">
@@ -113,6 +113,7 @@ button:disabled{opacity:.45}
     <div class="flowTitle">絞り込み状況</div>
     <div class="steps">
       <div class="step"><b id="checkedStat">0</b><span>確認レース</span></div>
+      <div class="step"><b id="unpublishedStat">0</b><span>AI未発表</span></div>
       <div class="step"><b id="starStat">0</b><span>星2</span></div>
       <div class="step"><b id="lineStat">0</b><span>指定ライン</span></div>
       <div class="step"><b id="orderStat">0</b><span>印条件</span></div>
@@ -145,14 +146,14 @@ button:disabled{opacity:.45}
 </div>
 
 <script>
-const STORAGE_KEY="winticket-mobile-v2.3-last-result";
+const STORAGE_KEY="winticket-mobile-v2.4-last-state";
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]||m))}
 function fmt(ts){if(!ts)return "未検索";return new Date(ts*1000).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}
 
 function saveSnapshot(s){
   try{
-    if(!s || !["done","stopped","error"].includes(s.phase)) return;
+    if(!s || s.phase==="idle") return;
     const snap={
       phase:s.phase,
       current:s.current||"",
@@ -195,12 +196,13 @@ function preferSnapshot(serverState){
 
   // Render再起動などでサーバー側が待機0件へ戻った時だけ、端末保存結果を復元。
   if(isServerEmptyIdle(serverState)){
-    return {
-      ...serverState,
-      ...snap,
-      running:false,
-      restored_from_device:true
-    };
+    const restored={...serverState,...snap,running:false,restored_from_device:true};
+    if(snap.running || ["starting","browser","venues","venue_list","races"].includes(snap.phase)){
+      restored.phase="stopped";
+      restored.current="検索中断";
+      restored.message="Render再起動のため検索が中断しました。取得済み情報を保持しています。";
+    }
+    return restored;
   }
 
   return serverState;
@@ -282,7 +284,7 @@ async function update(){
     const matches=s.matches||[];
     const errors=s.errors||[];
 
-    if(["done","stopped","error"].includes(s.phase)){
+    if(s.phase!=="idle"){
       saveSnapshot(s);
     }
 
@@ -292,6 +294,7 @@ async function update(){
     document.getElementById("f2VenueStat").textContent=c.f2_venues||0;
     document.getElementById("girlsStat").textContent=c.girls_l||0;
     document.getElementById("checkedStat").textContent=c.checked_races||0;
+    document.getElementById("unpublishedStat").textContent=c.unpublished||0;
     document.getElementById("starStat").textContent=c.star2||0;
     document.getElementById("lineStat").textContent=c.line_target||0;
     document.getElementById("orderStat").textContent=c.order_target||0;
