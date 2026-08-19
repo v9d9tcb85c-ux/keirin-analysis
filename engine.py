@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 
 def _log(msg):
     try:
@@ -73,7 +73,7 @@ def goto(page, url):
     last = None
     for attempt in range(MAX_RETRIES):
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            page.goto(url, wait_until="domcontentloaded", timeout=15000)
             page.wait_for_timeout(150)
             try:
                 return page.locator("body").inner_text(timeout=5000)
@@ -389,7 +389,7 @@ def line_mark_order(groups, hon, tai, ana, ren):
     )
 
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
-TARGET_ORDERS = {"◎〇△", "◎〇×"}
+TARGET_ORDERS = {"◎○△", "◎○×"}
 
 def three_line_order(groups, hon, tai, ana, ren):
     for group in groups:
@@ -435,19 +435,15 @@ def _browser_args():
         "--disable-features=Translate,BackForwardCache,MediaRouter,OptimizationHints",
     ]
 
-def _process_one_venue(playwright, venue, slug, today, progress=None, venue_index=0, venue_total=0):
+def _process_one_venue(browser, venue, slug, today, progress=None, venue_index=0, venue_total=0):
     matches = []
     unpublished = []
     errors = []
     checked = 0
 
-    browser = context = page = None
+    context = page = None
 
     try:
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=_browser_args()
-        )
         context = browser.new_context(
             locale="ja-JP",
             viewport={"width": 900, "height": 700},
@@ -635,22 +631,17 @@ def _process_one_venue(playwright, venue, slug, today, progress=None, venue_inde
                 context.close()
         except Exception:
             pass
-        try:
-            if browser:
-                browser.close()
-        except Exception:
-            pass
-
     _log(f"END venue={venue} checked={checked} matches={len(matches)} unpublished={len(unpublished)} errors={len(errors)}")
     return matches, unpublished, errors, checked
 
 
 def scan_today(progress=None):
-    from datetime import date
     import gc
     import time as _time
 
-    today = date.today()
+    # Render is UTC, so use Japan time explicitly.
+    JST = timezone(timedelta(hours=9))
+    today = datetime.now(JST).date()
 
     all_matches = []
     all_unpublished = []
@@ -661,38 +652,57 @@ def scan_today(progress=None):
     venue_total = len(venue_items)
 
     with sync_playwright() as p:
-        for vi, (venue, slug) in enumerate(venue_items, 1):
-            if progress:
-                progress({
-                    "phase": "venues",
-                    "current": f"{venue} ({vi}/{venue_total})",
-                    "done": vi - 1,
-                    "total": venue_total
-                })
+        browser = None
+        try:
+            for vi, (venue, slug) in enumerate(venue_items, 1):
+                # Keep memory bounded on Render Free: reuse Chromium and recycle
+                # it periodically instead of launching a new browser per venue.
+                if browser is None or (vi > 1 and (vi - 1) % 8 == 0):
+                    if browser is not None:
+                        try:
+                            browser.close()
+                        except Exception:
+                            pass
+                        gc.collect()
+                    browser = p.chromium.launch(headless=True, args=_browser_args())
 
-            try:
-                matches, unpublished, errors, checked = _process_one_venue(
-                    p,
-                    venue,
-                    slug,
-                    today,
-                    progress=progress,
-                    venue_index=vi - 1,
-                    venue_total=venue_total
-                )
+                if progress:
+                    progress({
+                        "phase": "venues",
+                        "current": f"{venue} ({vi}/{venue_total})",
+                        "done": vi - 1,
+                        "total": venue_total
+                    })
 
-                all_matches.extend(matches)
-                all_unpublished.extend(unpublished)
-                all_errors.extend(errors)
-                checked_total += checked
+                try:
+                    matches, unpublished, errors, checked = _process_one_venue(
+                        browser, venue, slug, today,
+                        progress=progress,
+                        venue_index=vi - 1,
+                        venue_total=venue_total
+                    )
+                    all_matches.extend(matches)
+                    all_unpublished.extend(unpublished)
+                    all_errors.extend(errors)
+                    checked_total += checked
+                except Exception as e:
+                    msg = f"{venue}: {type(e).__name__}: {e}"
+                    _log(f"VENUE_CRASH {msg}")
+                    all_errors.append(msg)
+                    try:
+                        if browser is not None and not browser.is_connected():
+                            browser = None
+                    except Exception:
+                        browser = None
 
-            except Exception as e:
-                msg = f"{venue}: {type(e).__name__}: {e}"
-                _log(f"VENUE_CRASH {msg}")
-                all_errors.append(msg)
-
-            gc.collect()
-            _time.sleep(0.25)
+                gc.collect()
+                _time.sleep(0.15)
+        finally:
+            if browser is not None:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
 
     def time_key(x):
         return (x.get("time") or "99:99", x.get("venue", ""), x.get("race", 0))

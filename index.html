@@ -3,178 +3,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#07111f">
+<meta name="theme-color" content="#06111f">
 <link rel="manifest" href="/manifest.webmanifest">
 <title>今日の該当レース</title>
 <style>
-:root{
- --bg:#07111f;--card:#101d30;--card2:#0c1727;--line:#263b58;--text:#f7faff;
- --muted:#92a6c0;--blue:#3478f6;--green:#50df89;--orange:#ffb45c;--red:#ff6b76;
- font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif
-}
-*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#07111f,#091525);color:var(--text)}
-main{max-width:720px;margin:auto;padding:env(safe-area-inset-top) 14px calc(100px + env(safe-area-inset-bottom))}
-.top{padding:20px 3px 12px}.eyebrow{color:#7fa9e8;font-size:12px;font-weight:700}.top h1{font-size:28px;margin:4px 0 4px}
-.subtitle{color:var(--muted);font-size:13px;line-height:1.5}
-.hero{background:linear-gradient(135deg,#15345f,#142740);border:1px solid #31517c;border-radius:22px;padding:18px;margin:8px 0 14px}
-.heroRow{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
-.count{font-size:54px;line-height:1;font-weight:900}.count small{font-size:16px;color:#b9c9dd;margin-left:5px}
-.updated{font-size:11px;color:#a6b7ca;text-align:right}
-.condition{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
-.chip{background:#0b1a2e;border:1px solid #31517c;padding:7px 9px;border-radius:999px;font-size:12px;font-weight:800}
-.statusCard{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:14px}
-.statusRow{display:flex;justify-content:space-between;gap:10px}.statusLabel{font-weight:800}.statusText{color:#c6d4e6}
-.bar{height:8px;background:#08111e;border-radius:999px;overflow:hidden;margin-top:12px}.fill{height:100%;width:0;background:linear-gradient(90deg,#3478f6,#5b9cff);transition:width .25s}
-.sectionTitle{display:flex;align-items:center;justify-content:space-between;margin:16px 2px 9px}.sectionTitle h2{font-size:17px;margin:0}.hint{font-size:11px;color:var(--muted)}
-.race{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:15px;margin:10px 0;box-shadow:0 8px 28px #0003}
-.raceTop{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-.venue{font-size:20px;font-weight:900}.raceNo{color:#9bb7dc;font-size:13px;margin-top:2px}
-.time{font-size:25px;font-weight:900;text-align:right}.day{font-size:11px;color:var(--muted);text-align:right}
-.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.tag{padding:7px 9px;border-radius:10px;background:#0a1627;border:1px solid #2c4566;font-size:13px;font-weight:800}
-.tag.hit{background:#0d3023;border-color:#277d54;color:#70eda7}.tag.star{background:#251f10;border-color:#66541d;color:#ffd76a}
-.order{margin-top:11px;background:var(--card2);padding:11px;border-radius:13px;color:#d4e0ef;font-size:14px;line-height:1.5}
-.open{display:block;text-decoration:none;color:#fff;background:#20395d;padding:11px;border-radius:12px;text-align:center;font-size:13px;font-weight:800;margin-top:10px}
-.unpub{background:#171a24;border:1px solid #4b4255;border-radius:16px;padding:12px;margin:8px 0}.unpub b{font-size:15px}.unpub span{display:block;color:#c7b6d7;font-size:12px;margin-top:4px}
-.empty{background:var(--card);border:1px dashed #324863;border-radius:20px;padding:30px 15px;text-align:center;color:var(--muted)}
-.empty b{display:block;color:#fff;font-size:18px;margin-bottom:6px}
-.error{color:#ffc0c5;font-size:12px;background:#32161b;border-radius:12px;padding:10px;margin-top:10px}
-.bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(5,12,22,.94);backdrop-filter:blur(18px);border-top:1px solid #243550;padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:20}
-.bottomIn{max-width:720px;margin:auto;display:flex;gap:9px}
-button{border:0;border-radius:15px;padding:15px;font-size:16px;font-weight:900;color:#fff}.refresh{flex:1;background:var(--blue)}.refresh:disabled{opacity:.45}.install{background:#25364f}
-.spin{display:inline-block;width:13px;height:13px;border:2px solid #ffffff55;border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;margin-right:7px;vertical-align:-1px}@keyframes spin{to{transform:rotate(360deg)}}
+:root{--bg:#06111f;--card:#10213a;--card2:#0a1728;--line:#274363;--text:#f4f7fb;--muted:#9fb1c8;--blue:#3478f6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:720px;margin:auto;padding:22px 18px 120px}.eyebrow{font-size:13px;font-weight:800;color:#76a8e8;letter-spacing:.05em}h1{font-size:34px;margin:7px 0 8px}.subtitle{color:var(--muted);line-height:1.7}.hero,.statusCard{background:linear-gradient(135deg,#183d6b,#142b4c);border:1px solid #356393;border-radius:24px;padding:20px;margin-top:20px}.heroRow,.statusRow{display:flex;justify-content:space-between;align-items:center}.count{font-size:58px;font-weight:900}.count small{font-size:18px;margin-left:6px}.hint,.updated{color:var(--muted);font-size:13px}.condition{display:flex;gap:7px;flex-wrap:wrap;margin-top:18px}.chip,.tag{border:1px solid #345b87;background:#0b1b30;border-radius:999px;padding:8px 12px;font-weight:800}.statusCard{background:#0e1c30}.statusLabel{font-size:20px;font-weight:900}.statusText{font-size:18px;color:#c7d7eb}.bar{height:8px;background:#07111e;border-radius:999px;overflow:hidden;margin-top:13px}.fill{height:100%;width:0;background:linear-gradient(90deg,#3478f6,#66a3ff);transition:width .25s}.sectionTitle{display:flex;justify-content:space-between;align-items:center;margin:20px 2px 8px}.sectionTitle h2{margin:0;font-size:20px}.race{background:#0e1d31;border:1px solid #294664;border-radius:20px;padding:16px;margin:10px 0}.raceTop{display:flex;justify-content:space-between}.venue{font-size:21px;font-weight:900}.time{font-size:24px;font-weight:900}.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.tag.hit{color:#7ff0ab}.tag.star{color:#ffd976}.order{background:#081526;border-radius:12px;padding:10px;margin-top:10px}.open{display:block;text-decoration:none;color:white;background:#203c63;padding:12px;border-radius:12px;text-align:center;margin-top:10px;font-weight:800}.unpub{background:#171827;border:1px solid #4c435c;border-radius:15px;padding:12px;margin:8px 0}.unpub span{display:block;color:#c5b7d6;font-size:12px;margin-top:4px}.empty{background:#0e1d31;border:1px dashed #35506e;border-radius:20px;padding:28px 15px;text-align:center;color:var(--muted)}.empty b{display:block;color:#fff;font-size:18px;margin-bottom:7px}.error{background:#3b171b;color:#ffc6ca;padding:11px;border-radius:12px;margin-top:12px;font-size:13px}.warn{background:#332b12;color:#ffe29a;padding:11px;border-radius:12px;margin-top:12px;font-size:13px}.hidden{display:none}.bottom{position:fixed;left:0;right:0;bottom:0;background:#06111ff2;border-top:1px solid #263d58;padding:11px 14px calc(11px + env(safe-area-inset-bottom))}.bottomIn{max-width:720px;margin:auto}.refresh{width:100%;border:0;border-radius:16px;padding:17px;background:var(--blue);color:#fff;font-size:18px;font-weight:900}.refresh:disabled{opacity:.48}.spin{display:inline-block;width:14px;height:14px;border:2px solid #ffffff55;border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;margin-right:7px;vertical-align:-1px}@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 <main>
-  <div class="top">
-    <div class="eyebrow">WINTICKET AUTO FINDER</div>
-    <h1>今日の該当レース</h1>
-    <div class="subtitle">全競輪場を自動確認。未公開はエラーにせず、あとで再判定します。</div>
-  </div>
-
-  <section class="hero">
-    <div class="heroRow">
-      <div><span id="count" class="count">—<small>件</small></span><div class="hint" style="margin-top:6px">未公開 <b id="unpublishedCount">—</b> 件</div></div>
-      <div class="updated">最終更新<br><b id="updated">未取得</b></div>
-    </div>
-    <div class="condition">
-      <span class="chip">F2</span><span class="chip">3.2.2</span><span class="chip">2.3.2</span>
-      <span class="chip">2.2.3</span><span class="chip">◎〇△ / ◎〇×</span>
-    </div>
-  </section>
-
-  <section class="statusCard">
-    <div class="statusRow"><span class="statusLabel">検索状況</span><span id="status" class="statusText">準備中</span></div>
-    <div class="statusRow" style="margin-top:7px"><span class="hint">現在</span><span id="current" class="hint">—</span></div>
-    <div class="bar"><div id="fill" class="fill"></div></div>
-    <div id="errorBox"></div>
-  </section>
-
-  
-  <div id="unpublishedSection" class="hidden">
-    <div class="sectionTitle"><h2>まだ判定できないレース</h2><span class="hint">公開後に再確認</span></div>
-    <section id="unpublishedList"></section>
-  </div>
-
-<div class="sectionTitle"><h2>該当レース</h2><span id="checked" class="hint"></span></div>
-  <section id="list"><div class="empty"><b>検索前です</b>自動検索を開始しています。</div></section>
+<div class="eyebrow">WINTICKET AUTO FINDER</div><h1>今日の該当レース</h1><div class="subtitle">全競輪場を自動確認。未公開はエラーにせず、あとで再判定します。</div>
+<section class="hero"><div class="heroRow"><div><span id="count" class="count">—<small>件</small></span><div class="hint">未公開 <b id="unpublishedCount">—</b> 件</div></div><div class="updated">最終更新<br><b id="updated">未取得</b></div></div><div class="condition"><span class="chip">F2</span><span class="chip">3.2.2</span><span class="chip">2.3.2</span><span class="chip">2.2.3</span><span class="chip">◎○△ / ◎○×</span></div></section>
+<section class="statusCard"><div class="statusRow"><span class="statusLabel">検索状況</span><span id="status" class="statusText">準備中</span></div><div class="statusRow" style="margin-top:7px"><span class="hint">現在</span><span id="current" class="hint">—</span></div><div class="bar"><div id="fill" class="fill"></div></div><div id="errorBox"></div></section>
+<div id="unpublishedSection" class="hidden"><div class="sectionTitle"><h2>まだ判定できないレース</h2><span class="hint">公開後に再確認</span></div><section id="unpublishedList"></section></div>
+<div class="sectionTitle"><h2>該当レース</h2><span id="checked" class="hint"></span></div><section id="list"><div class="empty"><b>検索前です</b>自動検索を開始しています。</div></section>
 </main>
-
-<div class="bottom">
-  <div class="bottomIn">
-    <button id="refresh" class="refresh">今日を更新</button>
-  </div>
-</div>
-
+<div class="bottom"><div class="bottomIn"><button id="refresh" class="refresh">今日を更新</button></div></div>
 <script>
-let first=true, autoRequested=false;
-function fmt(ts){
-  if(!ts)return "未取得";
-  const d=new Date(ts*1000);
-  return d.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
-}
+const CACHE_KEY="winticket-last-result-v2";
+let autoRequested=false;
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]||m))}
-function renderMatches(rows){
- const list=document.getElementById("list");
- if(!rows || rows.length===0){
-   list.innerHTML='<div class="empty"><b>現在の該当レースなし</b>未公開レースがある場合は、公開後に「今日を更新」で再確認します。</div>';
-   return;
- }
- list.innerHTML=rows.map(r=>`
-   <article class="race">
-     <div class="raceTop">
-       <div><div class="venue">${esc(r.venue)}</div><div class="raceNo">${esc(r.race)}R</div></div>
-       <div><div class="time">${esc(r.time||"時刻未取得")}</div><div class="day">${esc(r.day||"")}</div></div>
-     </div>
-     <div class="tags">
-       <span class="tag">${esc(r.line)}</span>
-       <span class="tag hit">${esc(r.three_order)}</span>
-       <span class="tag star">${esc(r.star)}</span>
-     </div>
-     <div class="order"><b>全体の順番</b><br>${esc(r.order||"—")}</div>
-     <a class="open" href="${esc(r.prediction_url)}" target="_blank" rel="noopener">WINTICKETでこの予想を見る</a>
-   </article>`).join("");
-}
-
-function renderUnpublished(rows){
-  const section=document.getElementById("unpublishedSection");
-  const list=document.getElementById("unpublishedList");
-  const cnt=document.getElementById("unpublishedCount");
-  cnt.textContent=(rows||[]).length;
-  if(!rows || rows.length===0){
-    section.classList.add("hidden");
-    list.innerHTML="";
-    return;
-  }
-  section.classList.remove("hidden");
-  list.innerHTML=rows.map(r=>`
-    <div class="unpub">
-      <b>${esc(r.venue)} ${esc(r.race)}R</b>
-      <span>${esc(r.reason||"AI予想・ライン未公開")}</span>
-    </div>`).join("");
-}
-
-async function status(){
- try{
-  const r=await fetch("/api/status",{cache:"no-store"});
-  const s=await r.json();
-  document.getElementById("count").innerHTML=(s.last_update? s.matches.length:"—")+'<small>件</small>';
-  document.getElementById("updated").textContent=fmt(s.last_update);
-  document.getElementById("current").textContent=s.current||"—";
-  document.getElementById("checked").textContent=s.checked_races?`確認 ${s.checked_races}レース`:"";
-  const pct=s.total?Math.floor(s.done/s.total*100):0;
-  document.getElementById("fill").style.width=pct+"%";
-  const btn=document.getElementById("refresh");
-  btn.disabled=!!s.running;
-  btn.innerHTML=s.running?'<span class="spin"></span>全場を検索中…':'今日を更新';
-
-  let st="待機中";
-  if(s.running) st=s.phase==="venues"?"開催を確認中":s.phase==="races"?"レースを判定中":"検索準備中";
-  else if(s.phase==="done") st="検索完了";
-  else if(s.phase==="error") st="エラー";
-  document.getElementById("status").textContent=st;
-
-  if(!s.running && s.last_update){ renderMatches(s.matches); renderUnpublished(s.unpublished||[]); }
-
-  const eb=document.getElementById("errorBox");
-  if(s.phase==="error") eb.innerHTML=`<div class="error">${esc(s.message)}</div>`;
-  else if(s.errors && s.errors.length) eb.innerHTML=`<div class="error">一部取得できないページあり：${s.errors.length}件</div>`;
-  else eb.innerHTML="";
-
-  if(!autoRequested && !s.running && !s.last_update){
-    autoRequested=true;
-    await fetch("/api/auto",{method:"POST"});
-  }
- }catch(e){
-  document.getElementById("status").textContent="サーバー未接続";
-  document.getElementById("errorBox").innerHTML='<div class="error">検索サーバーに接続できません。</div>';
- }
-}
-document.getElementById("refresh").addEventListener("click",async()=>{
- await fetch("/api/search",{method:"POST"});
- status();
-});
-if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
-status();setInterval(status,1800);
+function fmt(ts){if(!ts)return "未取得";return new Date(ts*1000).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}
+function loadLocal(){try{return JSON.parse(localStorage.getItem(CACHE_KEY)||"null")}catch(e){return null}}
+function saveLocal(s){try{if(s&&s.last_update)localStorage.setItem(CACHE_KEY,JSON.stringify({last_update:s.last_update,date:s.date,matches:s.matches||[],unpublished:s.unpublished||[],checked_races:s.checked_races||0,errors:s.errors||[],message:s.message||""}))}catch(e){}}
+function renderMatches(rows){const list=document.getElementById("list");if(!rows||!rows.length){list.innerHTML='<div class="empty"><b>現在の該当レースなし</b>未公開レースがある場合は、公開後に「今日を更新」で再確認します。</div>';return}list.innerHTML=rows.map(r=>`<article class="race"><div class="raceTop"><div><div class="venue">${esc(r.venue)}</div><div class="hint">${esc(r.race)}R</div></div><div><div class="time">${esc(r.time||"時刻未取得")}</div><div class="hint">${esc(r.day||"")}</div></div></div><div class="tags"><span class="tag">${esc(r.line)}</span><span class="tag hit">${esc(r.three_order)}</span><span class="tag star">${esc(r.star)}</span></div><div class="order"><b>全体の順番</b><br>${esc(r.order||"—")}</div><a class="open" href="${esc(r.prediction_url)}" target="_blank" rel="noopener">WINTICKETでこの予想を見る</a></article>`).join("")}
+function renderUnpublished(rows){const sec=document.getElementById("unpublishedSection"),list=document.getElementById("unpublishedList");document.getElementById("unpublishedCount").textContent=(rows||[]).length;if(!rows||!rows.length){sec.classList.add("hidden");list.innerHTML="";return}sec.classList.remove("hidden");list.innerHTML=rows.map(r=>`<div class="unpub"><b>${esc(r.venue)} ${esc(r.race)}R</b><span>${esc(r.reason||"AI予想・ライン未公開")}</span></div>`).join("")}
+function renderResult(s){document.getElementById("count").innerHTML=(s.last_update?(s.matches||[]).length:"—")+'<small>件</small>';document.getElementById("updated").textContent=fmt(s.last_update);document.getElementById("checked").textContent=s.checked_races?`確認 ${s.checked_races}レース`:"";if(s.last_update){renderMatches(s.matches||[]);renderUnpublished(s.unpublished||[])}}
+function fetchTimed(url,opt={},ms=8000){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);return fetch(url,{...opt,signal:c.signal,cache:"no-store"}).finally(()=>clearTimeout(t))}
+async function status(){let s=null;try{const r=await fetchTimed("/api/status",{},8000);if(!r.ok)throw new Error(`HTTP ${r.status}`);s=await r.json();if(s.last_update)saveLocal(s);else{const old=loadLocal();if(old&&!s.running)renderResult(old)}renderResult(s.last_update?s:(loadLocal()||s));document.getElementById("current").textContent=s.current||"—";const pct=s.total?Math.max(0,Math.min(100,Math.floor((s.done||0)/s.total*100))):0;document.getElementById("fill").style.width=pct+"%";const btn=document.getElementById("refresh");btn.disabled=!!s.running;btn.innerHTML=s.running?'<span class="spin"></span>全場を検索中…':"今日を更新";let st="待機中";if(s.running)st=s.phase==="venues"?"開催を確認中":s.phase==="races"?"レースを判定中":"検索準備中";else if(s.phase==="done")st="検索完了";else if(s.phase==="error")st="エラー";document.getElementById("status").textContent=st;const eb=document.getElementById("errorBox");if(s.phase==="error")eb.innerHTML=`<div class="error">${esc(s.message||"検索中にエラーが発生しました")}</div>`;else if(s.errors&&s.errors.length)eb.innerHTML=`<div class="warn">一部取得できないページあり：${s.errors.length}件</div>`;else eb.innerHTML="";if(!autoRequested&&!s.running&&!s.last_update&&!loadLocal()){autoRequested=true;await fetchTimed("/api/auto",{method:"POST"},8000)}}catch(e){const old=loadLocal();if(old)renderResult(old);document.getElementById("status").textContent="サーバー再接続待ち";document.getElementById("errorBox").innerHTML='<div class="warn">サーバー再起動中でも最後の検索結果を保持しています。</div>'}}
+document.getElementById("refresh").addEventListener("click",async()=>{const b=document.getElementById("refresh");b.disabled=true;try{await fetchTimed("/api/search",{method:"POST"},8000)}catch(e){}status()});
+const initial=loadLocal();if(initial)renderResult(initial);status();setInterval(status,2000);
+if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
 </script>
 </body></html>
