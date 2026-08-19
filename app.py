@@ -7,7 +7,7 @@ import json
 
 from engine import scan_today
 
-APP_VERSION = "mobile-simple-v2.4-midnight-fix"
+APP_VERSION = "mobile-simple-v2.5-venue-once"
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
 lock = threading.Lock()
