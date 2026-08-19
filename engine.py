@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION = "mobile-simple-v2.2-hold"
+ENGINE_VERSION = "mobile-simple-v2.3-persistent"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -114,14 +114,24 @@ def goto(page, url, stop_event=None):
 
 
 def parse_grade(text):
+    """
+    レース固有のL級表示を最優先。
+    ページ内に開催全体のF2表記とL1が共存しても、L1をガールズとして扱う。
+    """
     if not text:
         return ""
-    m = re.search(r"(?<![A-Z0-9])(F1|F2|L1|L2)(?![A-Z0-9])", text)
-    if m:
-        v = m.group(1)
-        return "L" if v.startswith("L") else v
+
+    # ガールズを最優先
+    if re.search(r"(?<![A-Z0-9])L1(?![A-Z0-9])", text):
+        return "L"
     if "L級" in text or "ガールズ" in text or "女子" in text:
         return "L"
+
+    # 男子開催ランク
+    m = re.search(r"(?<![A-Z0-9])(F1|F2)(?![A-Z0-9])", text)
+    if m:
+        return m.group(1)
+
     return ""
 
 

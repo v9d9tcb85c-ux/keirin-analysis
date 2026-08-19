@@ -82,7 +82,7 @@ button:disabled{opacity:.45}
 <body>
 <main>
   <div class="top">
-    <div class="eyebrow">WINTICKET SMART FINDER ・ SIMPLE ENGINE v2.2.2</div>
+    <div class="eyebrow">WINTICKET SMART FINDER ・ SIMPLE ENGINE v2.3.2</div>
     <h1>今日の買い目</h1>
     <div class="subtitle">開催場 → 今日のレース一覧 → 予想ページだけ。L級は即パス、F1は場ごと終了、F2だけ星2 → ライン → 印を確認します。</div>
   </div>
@@ -145,8 +145,67 @@ button:disabled{opacity:.45}
 </div>
 
 <script>
+const STORAGE_KEY="winticket-mobile-v2.3-last-result";
+
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]||m))}
 function fmt(ts){if(!ts)return "未検索";return new Date(ts*1000).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}
+
+function saveSnapshot(s){
+  try{
+    if(!s || !["done","stopped","error"].includes(s.phase)) return;
+    const snap={
+      phase:s.phase,
+      current:s.current||"",
+      detail:s.detail||"",
+      last_update:s.last_update||0,
+      finished_at:s.finished_at||0,
+      matches:s.matches||[],
+      errors:s.errors||[],
+      skipped:s.skipped||[],
+      counters:s.counters||{},
+      message:s.message||""
+    };
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(snap));
+  }catch(e){}
+}
+
+function loadSnapshot(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    return raw?JSON.parse(raw):null;
+  }catch(e){
+    return null;
+  }
+}
+
+function clearSnapshot(){
+  try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+}
+
+function isServerEmptyIdle(s){
+  const c=s?.counters||{};
+  const noCounts=Object.values(c).every(v=>!Number(v||0));
+  return !!s && !s.running && s.phase==="idle" &&
+    !(s.matches||[]).length && !(s.errors||[]).length && noCounts;
+}
+
+function preferSnapshot(serverState){
+  const snap=loadSnapshot();
+  if(!snap) return serverState;
+
+  // Render再起動などでサーバー側が待機0件へ戻った時だけ、端末保存結果を復元。
+  if(isServerEmptyIdle(serverState)){
+    return {
+      ...serverState,
+      ...snap,
+      running:false,
+      restored_from_device:true
+    };
+  }
+
+  return serverState;
+}
+
 function phaseName(p,running){
   if(!running){
     if(p==="done")return "検索完了";
@@ -170,7 +229,11 @@ function phaseDetail(s){
   if(s.phase==="venues")return "今日開催している競輪場だけを確認します。";
   if(s.phase==="venue_list")return "この場の今日のレース番号だけを確認します。";
   if(s.phase==="browser")return "Chromiumを確認しています。";
-  if(s.phase==="done")return "検索完了。結果は「終了」を押すまでこの画面に保持します。";
+  if(s.phase==="done"){
+    return s.restored_from_device
+      ? "前回の検索結果をこのiPhoneから復元しました。「終了」を押すまで保持します。"
+      : "検索完了。結果は「終了」を押すまでこの画面に保持します。";
+  }
   if(s.phase==="stopped")return "途中停止しました。「終了」で結果をリセットできます。";
   if(s.phase==="error")return s.message||"検索中にエラーが発生しました。";
   return "「検索開始」を押すと今日の検索を始めます。";
@@ -213,10 +276,15 @@ async function api(path){
 async function update(){
   try{
     const r=await fetch("/api/status",{cache:"no-store"});
-    const s=await r.json();
+    const serverState=await r.json();
+    const s=preferSnapshot(serverState);
     const c=s.counters||{};
     const matches=s.matches||[];
     const errors=s.errors||[];
+
+    if(["done","stopped","error"].includes(s.phase)){
+      saveSnapshot(s);
+    }
 
     document.getElementById("matchCount").innerHTML=`${matches.length}<small>件</small>`;
     document.getElementById("updated").textContent=fmt(s.last_update);
@@ -286,7 +354,9 @@ async function update(){
   }
 }
 document.getElementById("startBtn").addEventListener("click",async()=>{
-  await api("/api/start"); update();
+  const d=await api("/api/start");
+  if(d.ok) clearSnapshot();
+  update();
 });
 document.getElementById("stopBtn").addEventListener("click",async()=>{
   await api("/api/stop"); update();
@@ -294,6 +364,7 @@ document.getElementById("stopBtn").addEventListener("click",async()=>{
 document.getElementById("finishBtn").addEventListener("click",async()=>{
   const d=await api("/api/reset");
   if(d.ok){
+    clearSnapshot();
     document.getElementById("results").innerHTML='<div class="empty"><b>検索前です</b>下の「検索開始」を押してください。</div>';
     document.getElementById("venueNavSection").classList.add("hidden");
     document.getElementById("resultHint").textContent="未検索";

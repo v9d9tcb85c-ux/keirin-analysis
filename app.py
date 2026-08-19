@@ -6,7 +6,7 @@ import time
 
 from engine import scan_today
 
-APP_VERSION = "mobile-simple-v2.2-hold"
+APP_VERSION = "mobile-simple-v2.3-persistent"
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
 lock = threading.Lock()
