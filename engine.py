@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION = "mobile-simple-v2.5.3-diagnostic-logs"
+ENGINE_VERSION = "mobile-simple-v2.5.4-fast-goto"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -104,28 +104,66 @@ def _body_text(page):
 
 
 def goto(page, url, stop_event=None):
+    """
+    高速版:
+    - 通常待機は最大7秒
+    - timeoutでも本文が取れていれば成功扱い
+    - 再試行は1回だけ、2回目は最大4秒
+    """
     last = None
-    for attempt in range(MAX_RETRIES):
+    timeouts = (7000, 4000)
+
+    for attempt, timeout_ms in enumerate(timeouts, 1):
         _check_stop(stop_event)
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=18000)
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            page.wait_for_timeout(120)
+            body = _body_text(page)
+            if body:
+                if attempt > 1:
+                    _log(f"GOTO_RECOVERED attempt={attempt}/2 url={url}")
+                return body
+
+            # DOMContentLoaded後に本文がまだ空なら短く待つ
             page.wait_for_timeout(180)
             body = _body_text(page)
             if body:
                 return body
-            page.wait_for_timeout(300)
-            body = _body_text(page)
-            if body:
-                return body
+
             raise RuntimeError("ページ本文を取得できません")
+
         except Exception as e:
             last = e
-            _log(f"GOTO_FAIL attempt={attempt+1}/{MAX_RETRIES} url={url} error={type(e).__name__}:{e}")
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(0.5)
+
+            # timeoutでも、途中まで描画済みならそのまま使う
+            try:
+                body = _body_text(page)
+            except Exception:
+                body = ""
+
+            if body:
+                _log(
+                    f"GOTO_PARTIAL_OK attempt={attempt}/2 "
+                    f"timeout_ms={timeout_ms} url={url} "
+                    f"error={type(e).__name__}:{e}"
+                )
+                return body
+
+            _log(
+                f"GOTO_FAIL attempt={attempt}/2 "
+                f"timeout_ms={timeout_ms} url={url} "
+                f"error={type(e).__name__}:{e}"
+            )
+
+            if attempt < len(timeouts):
+                # 重いページを引きずらない
+                try:
+                    page.evaluate("window.stop()")
+                except Exception:
+                    pass
+                time.sleep(0.25)
+
     raise last
-
-
 def parse_grade(text):
     """
     小さい局所テキスト専用。
@@ -462,7 +500,7 @@ def scan_today(progress=None, stop_event=None):
             )
             enable_fast_mode(context)
             page=context.new_page()
-            page.set_default_timeout(6000)
+            page.set_default_timeout(4500)
 
             _progress(
                 progress, counters,
