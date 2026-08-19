@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import re
 import time
-from datetime import date, datetime
+from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
