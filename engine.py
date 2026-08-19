@@ -2,14 +2,12 @@
 import re
 import time
 import threading
-import subprocess
-import sys
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION = "mobile-new-v1"
+ENGINE_VERSION = "mobile-simple-v2"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -29,9 +27,6 @@ VENUES = {
 "佐世保":"sasebo","別府":"beppu","熊本":"kumamoto"
 }
 
-_BROWSER_READY = False
-_BROWSER_LOCK = threading.Lock()
-
 
 class StopRequested(Exception):
     pass
@@ -49,22 +44,6 @@ def _check_stop(stop_event):
     if stop_event and stop_event.is_set():
         raise StopRequested()
 
-
-def ensure_browser(progress=None):
-    """検索時はChromiumの存在確認だけ。インストールはRenderのBuild時に行う。"""
-    global _BROWSER_READY
-    if _BROWSER_READY:
-        return True
-    try:
-        with sync_playwright() as p:
-            exe = p.chromium.executable_path
-        if exe and Path(exe).exists():
-            _BROWSER_READY = True
-            _log(f"BROWSER_OK {exe}")
-            return True
-    except Exception as e:
-        _log(f"BROWSER_CHECK {type(e).__name__}: {e}")
-    return False
 
 def _browser_args():
     return [
@@ -101,50 +80,40 @@ def enable_fast_mode(context):
     context.route("**/*", handler)
 
 
+def _body_text(page):
+    """body.inner_text timeout依存を避ける。"""
+    try:
+        return page.evaluate("() => document.body ? document.body.innerText : ''") or ""
+    except Exception:
+        try:
+            return page.locator("body").text_content(timeout=2500) or ""
+        except Exception:
+            return ""
+
+
 def goto(page, url, stop_event=None):
-    """ページ取得。body待ちで全検索を落とさず、HTML/本文を段階的に回収する。"""
     last = None
-    for attempt in range(MAX_RETRIES + 1):
+    for attempt in range(MAX_RETRIES):
         _check_stop(stop_event)
         try:
-            page.goto(url, wait_until="commit", timeout=18000)
-            try:
-                page.wait_for_load_state("domcontentloaded", timeout=10000)
-            except Exception:
-                pass
-            page.wait_for_timeout(250 + attempt * 250)
-            try:
-                body = page.locator("body")
-                if body.count() > 0:
-                    txt = body.first.inner_text(timeout=2500)
-                    if txt.strip():
-                        return txt
-            except Exception:
-                pass
-            # bodyのinner_textが遅い/取れない場合でも、documentElementから救済。
-            try:
-                txt = page.evaluate("() => document.body?.innerText || document.documentElement?.innerText || ''") or ''
-                if txt.strip():
-                    return txt
-            except Exception:
-                pass
-            # 最後の救済: HTML自体が取れていれば返す。
-            html = page.content()
-            if html:
-                return html
-            raise RuntimeError("ページ本文を取得できませんでした")
+            page.goto(url, wait_until="domcontentloaded", timeout=18000)
+            page.wait_for_timeout(180)
+            body = _body_text(page)
+            if body:
+                return body
+            page.wait_for_timeout(300)
+            body = _body_text(page)
+            if body:
+                return body
+            raise RuntimeError("ページ本文を取得できません")
         except Exception as e:
             last = e
-            if attempt < MAX_RETRIES:
-                try:
-                    page.wait_for_timeout(500 + attempt * 500)
-                except Exception:
-                    time.sleep(0.5)
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(0.5)
     raise last
 
 
 def parse_grade(text):
-    """F1/F2/Lを拾う。L1/L2/L級/ガールズはL扱い。"""
     if not text:
         return ""
     m = re.search(r"(?<![A-Z0-9])(F1|F2|L1|L2)(?![A-Z0-9])", text)
@@ -262,7 +231,6 @@ def _collect_riders(page):
 
 
 def extract_line(page, stop_event=None):
-    """明示されたラインだけ読む。取れない時は推測しない。"""
     _check_stop(stop_event)
     all_riders=_collect_riders(page)
     formed=[]
@@ -272,8 +240,8 @@ def extract_line(page, stop_event=None):
         try:
             heading=page.get_by_text(re.compile("ラインパワー比較"))
             if heading.count():
-                heading.first.scroll_into_view_if_needed(timeout=1800)
-                page.wait_for_timeout(250 + 250*attempt)
+                heading.first.scroll_into_view_if_needed(timeout=1600)
+                page.wait_for_timeout(220 + 220*attempt)
                 data=heading.first.evaluate("""e=>{
                     let root=e;
                     for(let k=0;k<10&&root;k++,root=root.parentElement){
@@ -296,8 +264,8 @@ def extract_line(page, stop_event=None):
         except Exception:
             pass
         try:
-            page.evaluate("window.scrollBy(0,700)")
-            page.wait_for_timeout(250)
+            page.evaluate("window.scrollBy(0,650)")
+            page.wait_for_timeout(220)
         except Exception:
             pass
 
@@ -331,222 +299,57 @@ def race_info(url):
     return sid,day,race,actual
 
 
-def parse_start_time(body):
-    m=re.search(r"発走(?:予定)?[\s：:]*([0-2]?\d:[0-5]\d)", body or "")
-    return m.group(1) if m else ""
-
-
-def discover_today_venues(p, today, progress, stop_event):
-    """今日開催の場だけ拾う。"""
+def discover_today_venues(page, today, stop_event):
     _check_stop(stop_event)
-    browser=context=page=None
-    try:
-        browser=p.chromium.launch(headless=True,args=_browser_args())
-        context=browser.new_context(locale="ja-JP",viewport={"width":900,"height":700},service_workers="block")
-        enable_fast_mode(context)
-        page=context.new_page()
-        page.set_default_timeout(6500)
-        body=goto(page,f"{BASE}/keirin/racecard/{today.strftime('%Y%m%d')}",stop_event)
-        slugs=[];seen=set()
-        links=page.locator("a[href*='/keirin/']")
-        for i in range(links.count()):
-            href=links.nth(i).get_attribute("href") or ""
-            m=re.search(r"/keirin/([^/]+)/(?:racecard|raceresult|predictions)/",href)
-            if m and m.group(1) in VENUES.values() and m.group(1) not in seen:
-                seen.add(m.group(1));slugs.append(m.group(1))
-        if not slugs:
-            for venue,slug in VENUES.items():
-                if f"{venue}競輪" in body:
-                    slugs.append(slug)
-        rev={v:k for k,v in VENUES.items()}
-        return [(rev[s],s) for s in slugs if s in rev]
-    finally:
-        for obj in (page,context,browser):
-            try:
-                if obj: obj.close()
-            except Exception: pass
+    body=goto(page,f"{BASE}/keirin/racecard/{today.strftime('%Y%m%d')}",stop_event)
+    slugs=[];seen=set()
+    links=page.locator("a[href*='/keirin/']")
+    for i in range(links.count()):
+        href=links.nth(i).get_attribute("href") or ""
+        m=re.search(r"/keirin/([^/]+)/(?:racecard|raceresult|predictions)/",href)
+        if m and m.group(1) in VENUES.values() and m.group(1) not in seen:
+            seen.add(m.group(1));slugs.append(m.group(1))
+    if not slugs:
+        for venue,slug in VENUES.items():
+            if f"{venue}競輪" in body and slug not in seen:
+                seen.add(slug);slugs.append(slug)
+    rev={v:k for k,v in VENUES.items()}
+    return [(rev[s],s) for s in slugs if s in rev]
 
 
-def venue_races_and_grade(p, venue, slug, today, stop_event):
-    """
-    場単位の最初の安い判定。
-    月間結果ページから今日のレースURLを作り、
-    1Rだけ開いて場の開催ランクを先に見る。
-    F1なら場ごと終了。
-    """
-    browser=context=page=None
-    try:
-        _check_stop(stop_event)
-        browser=p.chromium.launch(headless=True,args=_browser_args())
-        context=browser.new_context(locale="ja-JP",viewport={"width":900,"height":700},service_workers="block")
-        enable_fast_mode(context)
-        page=context.new_page()
-        page.set_default_timeout(6500)
+def get_today_races(page, slug, today, stop_event):
+    _check_stop(stop_event)
+    month_url=f"{BASE}/keirin/{slug}/raceresult/{today.year}{today.month:02d}"
+    goto(page,month_url,stop_event)
 
-        month_url=f"{BASE}/keirin/{slug}/raceresult/{today.year}{today.month:02d}"
-        goto(page,month_url,stop_event)
-
-        rows=[]
-        seen=set()
-        for i in range(page.locator("a[href*='/raceresult/']").count()):
-            href=page.locator("a[href*='/raceresult/']").nth(i).get_attribute("href") or ""
-            info=race_info(href)
-            if not info: continue
-            sid,day_no,race_no,actual=info
-            if actual != today: continue
-            full=href if href.startswith("http") else BASE+href
-            key=(sid,day_no,race_no)
-            if key not in seen:
-                seen.add(key)
-                rows.append({"result_url":full,"sid":sid,"day":day_no,"race":race_no})
-        rows.sort(key=lambda x:x["race"])
-
-        if not rows:
-            return "", [], None
-
-        # 場の開催ランクを先判定。
-        # 1RがL級のことがあるので、最初の「F1/F2」が見つかるまでだけ確認する。
-        # F1が見つかった時点で、この場は後続レースを全部パスできる。
-        first_body=""
-        leading_l=[]
-        grade=""
-        for probe in rows:
-            _check_stop(stop_event)
-            pred_url=f"{BASE}/keirin/{slug}/predictions/{probe['sid']}/{probe['day']}/{probe['race']}"
-            body=goto(page,pred_url,stop_event)
-            if not first_body:
-                first_body=body
-            g=parse_grade(body)
-            if g=="L":
-                leading_l.append(probe["race"])
-                continue
-            if g in ("F1","F2"):
-                grade=g
-                break
-
-        return grade, rows, {"first_body":first_body,"leading_l":leading_l}
-    finally:
-        for obj in (page,context,browser):
-            try:
-                if obj: obj.close()
-            except Exception: pass
-
-
-def scan_f2_venue(p, venue, slug, today, rows, progress, stop_event, counters):
-    """
-    F2場のみ、レースごとに:
-    L級なら即パス → 星2 → ライン → 印
-    の順で安い条件から落とす。
-    """
-    matches=[]; errors=[]; skipped=[]
-    browser=context=page=None
-    try:
-        browser=p.chromium.launch(headless=True,args=_browser_args())
-        context=browser.new_context(locale="ja-JP",viewport={"width":900,"height":700},service_workers="block")
-        enable_fast_mode(context)
-        page=context.new_page()
-        page.set_default_timeout(6500)
-
-        for pos,row in enumerate(rows,1):
-            _check_stop(stop_event)
-            race=row["race"]
-            progress({
-                "phase":"races",
-                "current":f"{venue} {race}R",
-                "detail":"L級確認 → 星2 → ライン → 印",
-            })
-
-            pred_url=f"{BASE}/keirin/{slug}/predictions/{row['sid']}/{row['day']}/{race}"
-            try:
-                body=goto(page,pred_url,stop_event)
-                counters["checked_races"] += 1
-
-                grade=parse_grade(body)
-                # F2場の途中にL級があればそのレースだけ即パス
-                if grade=="L":
-                    counters["girls_l"] += 1
-                    skipped.append({"venue":venue,"race":race,"reason":"L級ガールズ"})
-                    continue
-
-                # F2場内でもページ上F2確認できたレースだけ先へ
-                if grade and grade!="F2":
-                    counters["non_f2_races"] += 1
-                    skipped.append({"venue":venue,"race":race,"reason":grade})
-                    continue
-
-                counters["f2_races"] += 1
-
-                star,_=confidence_dom(page)
-                if star is None:
-                    # 少しだけ遅延描画待ち
-                    page.wait_for_timeout(300)
-                    star,_=confidence_dom(page)
-                if star != TARGET_STAR:
-                    continue
-                counters["star2"] += 1
-
-                line,groups=extract_line(page,stop_event)
-                if line not in TARGET_LINES:
-                    continue
-                counters["line_target"] += 1
-
-                hon,tai,ana,ren=extract_ai_marks(page)
-                if hon in ("",None) or tai in ("",None):
-                    continue
-
-                order3=three_line_order(groups,hon,tai,ana,ren)
-                if order3 not in TARGET_ORDERS:
-                    continue
-                counters["order_target"] += 1
-
-                start_time=""
-                try:
-                    result_body=goto(page,row["result_url"],stop_event)
-                    start_time=parse_start_time(result_body)
-                except Exception:
-                    pass
-
-                match={
-                    "venue":venue,
-                    "slug":slug,
-                    "race":race,
-                    "time":start_time,
-                    "star":"星2",
-                    "line":line,
-                    "three_order":order3,
-                    "order":line_mark_order(groups,hon,tai,ana,ren),
-                    "prediction_url":pred_url,
-                }
-                matches.append(match)
-                counters["matched"] += 1
-
-            except StopRequested:
-                raise
-            except Exception as e:
-                msg=f"{venue} {race}R: {type(e).__name__}: {e}"
-                errors.append(msg)
-                counters["errors"] += 1
-
-        return matches, errors, skipped
-    finally:
-        for obj in (page,context,browser):
-            try:
-                if obj: obj.close()
-            except Exception: pass
+    rows=[]
+    seen=set()
+    links=page.locator("a[href*='/raceresult/']")
+    for i in range(links.count()):
+        href=links.nth(i).get_attribute("href") or ""
+        info=race_info(href)
+        if not info: continue
+        sid,day_no,race_no,actual=info
+        if actual != today: continue
+        key=(sid,day_no,race_no)
+        if key in seen: continue
+        seen.add(key)
+        rows.append({"sid":sid,"day":day_no,"race":race_no})
+    rows.sort(key=lambda x:x["race"])
+    return rows
 
 
 def scan_today(progress=None, stop_event=None):
     if progress is None:
         progress=lambda x:None
 
+    today=_today_jst()
     counters={
         "venues_found":0,
         "f2_venues":0,
         "f1_venues":0,
-        "other_venues":0,
         "checked_races":0,
         "girls_l":0,
-        "non_f2_races":0,
         "f2_races":0,
         "star2":0,
         "line_target":0,
@@ -556,7 +359,7 @@ def scan_today(progress=None, stop_event=None):
     }
 
     result={
-        "date":_today_jst().isoformat(),
+        "date":today.isoformat(),
         "matches":[],
         "errors":[],
         "skipped":[],
@@ -564,64 +367,151 @@ def scan_today(progress=None, stop_event=None):
         "stopped":False,
     }
 
+    browser=context=page=None
+
     try:
         _check_stop(stop_event)
-        if not ensure_browser(progress):
-            raise RuntimeError("Chromiumが見つかりません。Renderの再デプロイをしてください。")
 
-        today=_today_jst()
-        progress({"phase":"venues","current":"今日の開催場を確認中","detail":""})
-
+        # 検索1回につきChromium起動はここで1回だけ。
         with sync_playwright() as p:
-            venues=discover_today_venues(p,today,progress,stop_event)
+            browser=p.chromium.launch(headless=True,args=_browser_args())
+            context=browser.new_context(
+                locale="ja-JP",
+                viewport={"width":900,"height":700},
+                service_workers="block"
+            )
+            enable_fast_mode(context)
+            page=context.new_page()
+            page.set_default_timeout(6000)
+
+            progress({"phase":"venues","current":"今日の開催場を確認中","detail":"開催場一覧を1回確認します。"})
+
+            venues=discover_today_venues(page,today,stop_event)
             counters["venues_found"]=len(venues)
 
             for vi,(venue,slug) in enumerate(venues,1):
                 _check_stop(stop_event)
+
                 progress({
-                    "phase":"venue_grade",
+                    "phase":"venue_list",
                     "current":f"{venue} ({vi}/{len(venues)})",
-                    "detail":"まず場のランクだけ確認",
+                    "detail":"今日のレース一覧を取得",
                 })
 
                 try:
-                    grade,rows,_=venue_races_and_grade(p,venue,slug,today,stop_event)
+                    rows=get_today_races(page,slug,today,stop_event)
                 except StopRequested:
                     raise
                 except Exception as e:
-                    result["errors"].append(f"{venue}: 場確認 {type(e).__name__}: {e}")
-                    counters["errors"] += 1
+                    counters["errors"]+=1
+                    result["errors"].append(f"{venue}: 一覧取得 {type(e).__name__}: {e}")
                     continue
 
-                if grade=="F1":
-                    counters["f1_venues"] += 1
-                    result["skipped"].append({"venue":venue,"reason":"F1場を丸ごとパス"})
+                if not rows:
                     continue
 
-                if grade=="L":
-                    # もし場の先頭がLなら、F2混在の可能性があるため場全体は落とさずレース単位へ。
-                    # ただし「F2場」の判定には数えない。
-                    counters["other_venues"] += 1
+                venue_mode=""  # "" / F1 / F2
+                venue_counted=False
 
-                elif grade=="F2":
-                    counters["f2_venues"] += 1
-                else:
-                    counters["other_venues"] += 1
-                    # 不明時は安全側でレース単位確認（取りこぼし防止）
+                for row in rows:
+                    _check_stop(stop_event)
+                    race=row["race"]
 
-                # F1以外のみレース単位へ。L級は各レースで即パス。
-                m,e,s=scan_f2_venue(
-                    p,venue,slug,today,rows,progress,stop_event,counters
-                )
-                result["matches"].extend(m)
-                result["errors"].extend(e)
-                result["skipped"].extend(s)
+                    progress({
+                        "phase":"races",
+                        "current":f"{venue} {race}R",
+                        "detail":"L級 → F1/F2 → 星2 → ライン → 印",
+                    })
 
-        result["matches"].sort(key=lambda x:(x.get("time") or "99:99",x["venue"],x["race"]))
-        progress({"phase":"done","current":"検索完了","detail":""})
-        return result
+                    pred_url=f"{BASE}/keirin/{slug}/predictions/{row['sid']}/{row['day']}/{race}"
+
+                    try:
+                        body=goto(page,pred_url,stop_event)
+                        counters["checked_races"]+=1
+
+                        grade=parse_grade(body)
+
+                        # L級はそのレースだけ即パス。
+                        if grade=="L":
+                            counters["girls_l"]+=1
+                            result["skipped"].append({"venue":venue,"race":race,"reason":"L級ガールズ"})
+                            continue
+
+                        # 最初の男子レースでF1/F2を確定。
+                        if grade=="F1":
+                            venue_mode="F1"
+                            counters["f1_venues"]+=1
+                            result["skipped"].append({"venue":venue,"reason":"F1場を丸ごとパス"})
+                            break
+
+                        if grade=="F2":
+                            venue_mode="F2"
+                            if not venue_counted:
+                                counters["f2_venues"]+=1
+                                venue_counted=True
+                        elif venue_mode=="":
+                            # ランクが読めない男子レースは安全側で次へ。
+                            continue
+
+                        # 場がF2確定後だけ条件判定。
+                        if venue_mode!="F2":
+                            continue
+
+                        counters["f2_races"]+=1
+
+                        star,_=confidence_dom(page)
+                        if star is None:
+                            page.wait_for_timeout(250)
+                            star,_=confidence_dom(page)
+                        if star != TARGET_STAR:
+                            continue
+                        counters["star2"]+=1
+
+                        line,groups=extract_line(page,stop_event)
+                        if line not in TARGET_LINES:
+                            continue
+                        counters["line_target"]+=1
+
+                        hon,tai,ana,ren=extract_ai_marks(page)
+                        if hon in ("",None) or tai in ("",None):
+                            continue
+
+                        order3=three_line_order(groups,hon,tai,ana,ren)
+                        if order3 not in TARGET_ORDERS:
+                            continue
+                        counters["order_target"]+=1
+
+                        result["matches"].append({
+                            "venue":venue,
+                            "slug":slug,
+                            "race":race,
+                            "star":"星2",
+                            "line":line,
+                            "three_order":order3,
+                            "order":line_mark_order(groups,hon,tai,ana,ren),
+                            "prediction_url":pred_url,
+                        })
+                        counters["matched"]+=1
+
+                    except StopRequested:
+                        raise
+                    except Exception as e:
+                        counters["errors"]+=1
+                        result["errors"].append(f"{venue} {race}R: {type(e).__name__}: {e}")
+                        continue
+
+            result["matches"].sort(key=lambda x:(x["venue"],x["race"]))
+            progress({"phase":"done","current":"検索完了","detail":""})
+            return result
 
     except StopRequested:
         result["stopped"]=True
         progress({"phase":"stopped","current":"途中停止","detail":"停止しました"})
         return result
+
+    finally:
+        for obj in (page,context,browser):
+            try:
+                if obj: obj.close()
+            except Exception:
+                pass
