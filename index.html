@@ -82,7 +82,7 @@ button:disabled{opacity:.45}
 <body>
 <main>
   <div class="top">
-    <div class="eyebrow">WINTICKET SMART FINDER ・ SIMPLE ENGINE v2.2</div>
+    <div class="eyebrow">WINTICKET SMART FINDER ・ SIMPLE ENGINE v2.2.2</div>
     <h1>今日の買い目</h1>
     <div class="subtitle">開催場 → 今日のレース一覧 → 予想ページだけ。L級は即パス、F1は場ごと終了、F2だけ星2 → ライン → 印を確認します。</div>
   </div>
@@ -159,16 +159,18 @@ function phaseName(p,running){
     browser:"ブラウザ準備中",
     venues:"開催場を確認中",
     venue_grade:"場のF1/F2を確認中",
-    races:"F2レースを判定中"
+    venue_list:"レース一覧を確認中",
+    races:"レース条件を確認中"
   })[p]||"検索中";
 }
 function phaseDetail(s){
   if(s.detail)return s.detail;
   if(s.phase==="venue_grade")return "F1ならこの場を丸ごとパスします。";
-  if(s.phase==="races")return "L級をパス → 星2 → ライン → 印の順で確認します。";
+  if(s.phase==="races")return s.detail||"L級 / F1 / F2 を確認し、F2だけ星2 → ライン → 印を確認します。";
   if(s.phase==="venues")return "今日開催している競輪場だけを確認します。";
+  if(s.phase==="venue_list")return "この場の今日のレース番号だけを確認します。";
   if(s.phase==="browser")return "Chromiumを確認しています。";
-  if(s.phase==="done")return "検索が完了しました。場ボタンから該当レースへ移動できます。";
+  if(s.phase==="done")return "検索完了。結果は「終了」を押すまでこの画面に保持します。";
   if(s.phase==="stopped")return "途中停止しました。「終了」で結果をリセットできます。";
   if(s.phase==="error")return s.message||"検索中にエラーが発生しました。";
   return "「検索開始」を押すと今日の検索を始めます。";
@@ -231,8 +233,10 @@ async function update(){
 
     let pct=0;
     if(s.running){
-      const rough={starting:5,browser:10,venues:20,venue_grade:35,races:60};
+      const rough={starting:5,browser:10,venues:18,venue_list:30,races:55};
       pct=rough[s.phase]||15;
+      const checked=Number(c.checked_races||0);
+      if(s.phase==="races" && checked>0) pct=Math.min(92,55+checked);
     }else if(s.phase==="done")pct=100;
     else if(s.phase==="stopped")pct=70;
     document.getElementById("fill").style.width=pct+"%";
@@ -248,11 +252,27 @@ async function update(){
       stop.classList.remove("hidden");
       finish.classList.add("hidden");
       document.getElementById("resultHint").textContent="検索中";
+      if(matches.length){
+        renderMatches(matches);
+      }else{
+        document.getElementById("venueNavSection").classList.add("hidden");
+        document.getElementById("results").innerHTML=
+          '<div class="empty"><b>検索中です</b>'+esc(s.current||"条件に合うレースを探しています。")+' を確認しています。</div>';
+      }
     }else if(["done","stopped","error"].includes(s.phase)){
       start.classList.add("hidden");
       stop.classList.add("hidden");
       finish.classList.remove("hidden");
-      document.getElementById("resultHint").textContent=s.phase==="done"?`${matches.length}件`:"終了待ち";
+
+      if(s.phase==="done"){
+        document.getElementById("resultHint").textContent=`検索完了・${matches.length}件`;
+      }else if(s.phase==="stopped"){
+        document.getElementById("resultHint").textContent="途中停止・終了待ち";
+      }else{
+        document.getElementById("resultHint").textContent="エラー・終了待ち";
+      }
+
+      // 完了/停止/エラー後も「終了」を押すまでは取得済み結果を保持して表示する。
       renderMatches(matches);
     }else{
       start.classList.remove("hidden");
@@ -276,6 +296,7 @@ document.getElementById("finishBtn").addEventListener("click",async()=>{
   if(d.ok){
     document.getElementById("results").innerHTML='<div class="empty"><b>検索前です</b>下の「検索開始」を押してください。</div>';
     document.getElementById("venueNavSection").classList.add("hidden");
+    document.getElementById("resultHint").textContent="未検索";
   }
   update();
 });

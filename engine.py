@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION = "mobile-simple-v2"
+ENGINE_VERSION = "mobile-simple-v2.2-hold"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -339,6 +339,13 @@ def get_today_races(page, slug, today, stop_event):
     return rows
 
 
+
+def _progress(progress, counters, **kw):
+    payload=dict(kw)
+    payload["counters"]=dict(counters)
+    progress(payload)
+
+
 def scan_today(progress=None, stop_event=None):
     if progress is None:
         progress=lambda x:None
@@ -384,19 +391,21 @@ def scan_today(progress=None, stop_event=None):
             page=context.new_page()
             page.set_default_timeout(6000)
 
-            progress({"phase":"venues","current":"今日の開催場を確認中","detail":"開催場一覧を1回確認します。"})
+            _progress(progress, counters, phase="venues", current="今日の開催場を確認中", detail="開催場一覧を1回確認します。")
 
             venues=discover_today_venues(page,today,stop_event)
             counters["venues_found"]=len(venues)
+            _progress(progress, counters, phase="venues", current="開催場確認完了", detail=f"{len(venues)}場を確認しました。")
 
             for vi,(venue,slug) in enumerate(venues,1):
                 _check_stop(stop_event)
 
-                progress({
-                    "phase":"venue_list",
-                    "current":f"{venue} ({vi}/{len(venues)})",
-                    "detail":"今日のレース一覧を取得",
-                })
+                _progress(
+                    progress, counters,
+                    phase="venue_list",
+                    current=f"{venue} ({vi}/{len(venues)})",
+                    detail="今日のレース一覧を取得"
+                )
 
                 try:
                     rows=get_today_races(page,slug,today,stop_event)
@@ -417,17 +426,24 @@ def scan_today(progress=None, stop_event=None):
                     _check_stop(stop_event)
                     race=row["race"]
 
-                    progress({
-                        "phase":"races",
-                        "current":f"{venue} {race}R",
-                        "detail":"L級 → F1/F2 → 星2 → ライン → 印",
-                    })
+                    _progress(
+                        progress, counters,
+                        phase="races",
+                        current=f"{venue} {race}R",
+                        detail="L級 / F1 / F2 を確認 → F2なら星2 → ライン → 印"
+                    )
 
                     pred_url=f"{BASE}/keirin/{slug}/predictions/{row['sid']}/{row['day']}/{race}"
 
                     try:
                         body=goto(page,pred_url,stop_event)
                         counters["checked_races"]+=1
+                        _progress(
+                            progress, counters,
+                            phase="races",
+                            current=f"{venue} {race}R",
+                            detail="L級 / F1 / F2 を確認中"
+                        )
 
                         grade=parse_grade(body)
 
@@ -435,6 +451,7 @@ def scan_today(progress=None, stop_event=None):
                         if grade=="L":
                             counters["girls_l"]+=1
                             result["skipped"].append({"venue":venue,"race":race,"reason":"L級ガールズ"})
+                            _progress(progress, counters, phase="races", current=f"{venue} {race}R", detail="L級ガールズ → パス")
                             continue
 
                         # 最初の男子レースでF1/F2を確定。
@@ -442,6 +459,7 @@ def scan_today(progress=None, stop_event=None):
                             venue_mode="F1"
                             counters["f1_venues"]+=1
                             result["skipped"].append({"venue":venue,"reason":"F1場を丸ごとパス"})
+                            _progress(progress, counters, phase="races", current=venue, detail="F1場 → この場を丸ごとパス")
                             break
 
                         if grade=="F2":
@@ -449,6 +467,7 @@ def scan_today(progress=None, stop_event=None):
                             if not venue_counted:
                                 counters["f2_venues"]+=1
                                 venue_counted=True
+                                _progress(progress, counters, phase="races", current=venue, detail="F2場と確認 → レース判定を続行")
                         elif venue_mode=="":
                             # ランクが読めない男子レースは安全側で次へ。
                             continue
@@ -458,6 +477,7 @@ def scan_today(progress=None, stop_event=None):
                             continue
 
                         counters["f2_races"]+=1
+                        _progress(progress, counters, phase="races", current=f"{venue} {race}R", detail="F2 → 星2を確認中")
 
                         star,_=confidence_dom(page)
                         if star is None:
@@ -466,11 +486,13 @@ def scan_today(progress=None, stop_event=None):
                         if star != TARGET_STAR:
                             continue
                         counters["star2"]+=1
+                        _progress(progress, counters, phase="races", current=f"{venue} {race}R", detail="星2 → ラインを確認中")
 
                         line,groups=extract_line(page,stop_event)
                         if line not in TARGET_LINES:
                             continue
                         counters["line_target"]+=1
+                        _progress(progress, counters, phase="races", current=f"{venue} {race}R", detail="指定ライン → 印を確認中")
 
                         hon,tai,ana,ren=extract_ai_marks(page)
                         if hon in ("",None) or tai in ("",None):
@@ -480,6 +502,7 @@ def scan_today(progress=None, stop_event=None):
                         if order3 not in TARGET_ORDERS:
                             continue
                         counters["order_target"]+=1
+                        _progress(progress, counters, phase="races", current=f"{venue} {race}R", detail="印条件一致 → 該当")
 
                         result["matches"].append({
                             "venue":venue,
@@ -492,6 +515,7 @@ def scan_today(progress=None, stop_event=None):
                             "prediction_url":pred_url,
                         })
                         counters["matched"]+=1
+                        _progress(progress, counters, phase="races", current=f"{venue} {race}R", detail="該当レースに追加")
 
                     except StopRequested:
                         raise
@@ -501,12 +525,12 @@ def scan_today(progress=None, stop_event=None):
                         continue
 
             result["matches"].sort(key=lambda x:(x["venue"],x["race"]))
-            progress({"phase":"done","current":"検索完了","detail":""})
+            _progress(progress, counters, phase="done", current="検索完了", detail="")
             return result
 
     except StopRequested:
         result["stopped"]=True
-        progress({"phase":"stopped","current":"途中停止","detail":"停止しました"})
+        _progress(progress, counters, phase="stopped", current="途中停止", detail="停止しました")
         return result
 
     finally:

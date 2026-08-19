@@ -6,7 +6,7 @@ import time
 
 from engine import scan_today
 
-APP_VERSION = "mobile-simple-v2"
+APP_VERSION = "mobile-simple-v2.2-hold"
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
 lock = threading.Lock()
@@ -29,6 +29,7 @@ state = {
     "skipped":[],
     "counters":dict(EMPTY_COUNTERS),
     "message":"",
+    "finished_at":0,
 }
 
 
@@ -44,6 +45,10 @@ def progress_update(p):
         state["phase"]=p.get("phase",state["phase"])
         state["current"]=p.get("current",state["current"])
         state["detail"]=p.get("detail",state["detail"])
+        if isinstance(p.get("counters"), dict):
+            merged=dict(state.get("counters") or EMPTY_COUNTERS)
+            merged.update(p["counters"])
+            state["counters"]=merged
 
 
 def run_scan():
@@ -61,6 +66,7 @@ def run_scan():
             "skipped":[],
             "counters":dict(EMPTY_COUNTERS),
             "message":"",
+            "finished_at":0,
         })
         stop_event.clear()
 
@@ -71,7 +77,9 @@ def run_scan():
             state["errors"]=result.get("errors",[])
             state["skipped"]=result.get("skipped",[])
             state["counters"]=result.get("counters",dict(EMPTY_COUNTERS))
-            state["last_update"]=int(time.time())
+            now=int(time.time())
+            state["last_update"]=now
+            state["finished_at"]=now
 
             if result.get("stopped"):
                 state["phase"]="stopped"
@@ -100,6 +108,7 @@ def index():
 
 @app.route("/api/status")
 def api_status():
+    # status is read-only: 検索完了後の結果は /api/reset まで保持する
     with lock:
         data=dict(state)
     data["app_version"]=APP_VERSION
@@ -140,6 +149,7 @@ def api_reset():
             "skipped":[],
             "counters":dict(EMPTY_COUNTERS),
             "message":"",
+            "finished_at":0,
         })
         stop_event.clear()
     return _no_cache(jsonify({"ok":True}))
