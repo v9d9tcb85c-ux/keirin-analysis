@@ -6,7 +6,7 @@ import time
 
 from engine import scan_today
 
-APP_VERSION = "mobile-new-v1.1"
+APP_VERSION = "mobile-new-v1.2-docker"
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
 lock = threading.Lock()
