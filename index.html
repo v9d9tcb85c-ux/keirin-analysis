@@ -1,49 +1,101 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#07111f"><title>WINTICKET PCリモート</title>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#071a35">
+<title>WINTICKET F2巡回ツール</title>
 <style>
-:root{color-scheme:dark;--bg:#06101d;--panel:#0d1b2e;--panel2:#0a1626;--line:#294767;--blue:#3b82f6;--green:#6ee7a0;--red:#ff9fa8;--muted:#9db0c8;--amber:#ffd166}
-*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:#fff;margin:0;padding:14px 14px 110px;max-width:900px;margin-inline:auto}
-h1{font-size:27px;margin:5px 0 2px}.sub{color:var(--muted);font-size:14px;margin:0 0 12px}.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px;margin:12px 0}.title{font-size:19px;font-weight:900;margin-bottom:10px}
-.online{color:var(--green)}.offline{color:var(--red)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.venue{display:block;background:var(--panel2);border:1px solid var(--line);border-radius:15px;padding:12px;min-height:92px;position:relative}.venue:has(input:checked){outline:2px solid var(--blue);background:#102543}.venue input{position:absolute;right:10px;top:10px;width:26px;height:26px;accent-color:var(--blue)}.venue.disabled{opacity:.48}.name{font-size:19px;font-weight:900;padding-right:30px}.tags{margin-top:10px;display:flex;gap:6px}.tag{border:1px solid #44688f;border-radius:9px;padding:5px 8px;font-weight:900;font-size:14px}.f2{color:var(--green);border-color:#387953}.f1{color:var(--red);border-color:#75444d}.unknown{color:var(--amber)}
-.current{font-size:18px;font-weight:900}.detail{color:var(--muted);font-size:13px;line-height:1.5;margin-top:5px}.metrics{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}.metric{background:var(--panel2);border:1px solid var(--line);padding:8px 10px;border-radius:11px;font-size:13px}.metric b{font-size:18px}
-.track{height:12px;background:#071321;border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-top:12px}.fill{height:100%;width:0;background:var(--blue);transition:width .4s}.result{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px;margin:8px 0}.go{display:block;text-align:center;text-decoration:none;background:var(--blue);color:#fff;border-radius:11px;padding:10px;font-weight:900;margin-top:8px}.empty{color:var(--muted)}.error{color:#ffc0c5;font-size:13px}
-.bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(5,12,22,.97);border-top:1px solid #203650;padding:10px 10px calc(10px + env(safe-area-inset-bottom));z-index:20}.bottomin{display:flex;gap:8px;width:min(900px,100%);margin:auto}.bottom button{flex:1;border:0;border-radius:13px;padding:14px 8px;color:#fff;background:var(--blue);font-weight:900;font-size:15px}.bottom .stop{background:#963d45}.bottom .secondary{background:#29415c}.hide{display:none!important}
-@media(max-width:420px){body{padding-inline:10px}.grid{gap:7px}.venue{padding:10px;min-height:88px}.name{font-size:17px}}
-</style></head><body>
-<h1>WINTICKET F2巡回</h1><p class="sub">スマホは操作・表示だけ。WINTICKET取得はPCで実行します。</p>
+:root{
+  color-scheme:dark;
+  --bg:#06162c;--bg2:#0a2346;--panel:#081a35;--panel2:#061326;
+  --line:#008cff;--cyan:#00d9ff;--blue:#168cff;--green:#20f06a;
+  --yellow:#ffe000;--red:#ff334d;--purple:#cf42ff;--text:#f7fbff;
+  --muted:#b9c9e6;--shadow:0 0 18px rgba(0,141,255,.22);
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;
+  background:
+    radial-gradient(circle at 8% 0%,rgba(20,115,255,.28),transparent 28%),
+    radial-gradient(circle at 92% 12%,rgba(0,210,255,.16),transparent 24%),
+    linear-gradient(180deg,#0a2852 0,#071a35 22%,#041125 100%);
+  color:var(--text);margin:0;padding:12px 12px 112px;min-height:100vh;
+}
+.shell{width:min(920px,100%);margin:auto}
+.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:10px;margin-bottom:10px}
+.brand,.quick{border-radius:20px;background:linear-gradient(145deg,rgba(7,29,63,.96),rgba(2,13,31,.96));box-shadow:var(--shadow)}
+.brand{border:1px solid #279bff;padding:14px 16px 12px;position:relative;overflow:hidden}
+.brand:after{content:"";position:absolute;right:-40px;top:-45px;width:180px;height:180px;background:linear-gradient(135deg,transparent 30%,rgba(0,152,255,.20) 31% 40%,transparent 41% 55%,rgba(255,224,0,.15) 56% 63%,transparent 64%);transform:rotate(-8deg);pointer-events:none}
+.wt{font-size:28px;line-height:1;font-weight:1000;letter-spacing:.8px;text-shadow:0 0 18px rgba(255,255,255,.18)}
+.f2hero{font-size:35px;line-height:1.05;font-weight:1000;margin-top:4px}.f2hero b{color:var(--yellow);font-size:42px;text-shadow:0 0 16px rgba(255,224,0,.28)}
+.heroSub{font-size:13px;font-weight:800;margin-top:8px;color:#fff}
+.marks{display:flex;gap:16px;align-items:center;margin-top:8px;font-weight:1000;font-size:25px}
+.marks .m1{color:var(--yellow)}.marks .m2{color:var(--green)}.marks .m3{color:var(--cyan)}.marks .m4{color:var(--red)}
+.legendTop{font-size:11px;color:var(--muted);margin-top:5px}.legendTop b:nth-of-type(1){color:var(--yellow)}.legendTop b:nth-of-type(2){color:var(--purple)}.legendTop b:nth-of-type(3){color:#dce8ff}.legendTop b:nth-of-type(4){color:var(--cyan)}
+.quick{display:grid;grid-template-rows:1fr 1fr;gap:8px;background:transparent;box-shadow:none}
+.quickbox{background:linear-gradient(145deg,#081a35,#031023);border-radius:16px;padding:11px 13px;box-shadow:var(--shadow)}
+.connection{border:1px solid #b4e600}.clockbox{border:1px solid var(--cyan);display:flex;justify-content:space-between;align-items:center}
+.online{color:var(--green);font-size:17px;font-weight:1000}.offline{color:#ff7f91;font-size:17px;font-weight:1000}
+.pcSub{font-size:11px;color:#dce8ff;margin-top:4px}.clockLabel{font-size:13px;font-weight:900}.clock{font-size:34px;font-weight:1000;color:var(--yellow);line-height:1;margin-top:4px;text-shadow:0 0 16px rgba(255,224,0,.3)}.bike{font-size:42px;filter:drop-shadow(0 0 8px rgba(0,170,255,.55))}
+.card{background:linear-gradient(145deg,rgba(6,25,52,.98),rgba(2,13,28,.98));border:1px solid var(--line);border-radius:18px;padding:12px;margin:10px 0;box-shadow:var(--shadow)}
+.titleRow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}.title{font-size:19px;font-weight:1000;display:flex;align-items:center;gap:8px}.num{width:34px;height:34px;border-radius:50%;display:inline-grid;place-items:center;color:#fff;border:2px solid var(--cyan);background:#07315f;box-shadow:0 0 13px rgba(0,185,255,.6);font-size:15px}.selTop{font-size:13px;color:var(--cyan);font-weight:900}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.venue{display:block;background:linear-gradient(145deg,#071a35,#041125);border:1px solid #31658d;border-radius:14px;padding:10px;min-height:84px;position:relative;transition:.16s}.venue:has(input:checked){border-color:#00a8ff;box-shadow:inset 0 0 0 1px #087dff,0 0 12px rgba(0,142,255,.30);background:linear-gradient(145deg,#0d2e5b,#071a35)}.venue input{position:absolute;right:10px;top:10px;width:25px;height:25px;accent-color:#1498ff}.venue.disabled{opacity:.52}.name{font-size:18px;font-weight:1000;padding-right:34px}.tags{margin-top:9px;display:flex;gap:6px;align-items:center}.tag{border:1px solid #547493;border-radius:8px;padding:4px 8px;font-weight:1000;font-size:13px;background:#07101f}.f2{color:#43ff75;border-color:#10b84b}.f1{color:#ff596d;border-color:#b9283b}.unknown{color:var(--yellow)}.session-M{color:var(--yellow);border-color:#9c8c00}.session-D{color:#ef62ff;border-color:#77298d}.session-N{color:#d4e3ff;border-color:#547493}.session-MN{color:var(--cyan);border-color:#167fa4}
+.detail{color:var(--muted);font-size:12px;line-height:1.45;margin-top:5px}.current{font-size:20px;font-weight:1000;color:var(--green);text-shadow:0 0 12px rgba(32,240,106,.25)}
+.track{height:11px;background:#02101f;border:1px solid #25537e;border-radius:999px;overflow:hidden;margin-top:11px;box-shadow:inset 0 0 8px rgba(0,0,0,.6)}.fill{height:100%;width:0;background:linear-gradient(90deg,#008dff,#00e5ff);box-shadow:0 0 12px rgba(0,220,255,.7);transition:width .4s}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.metric{background:#061326;border:1px solid #246fa8;border-radius:12px;padding:8px 6px;text-align:center;font-size:12px;font-weight:900}.metric b{display:block;font-size:28px;line-height:1.05;margin-top:2px}.metric:nth-child(1) b{color:#159dff}.metric:nth-child(2){border-color:#a58d00}.metric:nth-child(2) b{color:var(--yellow)}.metric:nth-child(3){border-color:#a92639}.metric:nth-child(3) b{color:var(--red)}
+.result{display:grid;grid-template-columns:110px 1fr;gap:10px;background:linear-gradient(145deg,#071a35,#041125);border:1px solid #168fff;border-radius:13px;padding:10px;margin:8px 0}.raceBig{border-right:1px solid #1476bf;display:flex;flex-direction:column;justify-content:center;text-align:center}.raceVenue{font-size:14px;font-weight:900}.raceNo{font-size:31px;font-weight:1000;color:var(--yellow);line-height:1}.resultMeta{font-size:15px;font-weight:900;min-height:26px}.go{display:block;text-align:center;text-decoration:none;background:linear-gradient(180deg,#0f66e6,#0648bb);border:1px solid #1aa4ff;color:#fff;border-radius:9px;padding:8px;font-weight:1000;margin-top:6px;box-shadow:inset 0 0 14px rgba(0,165,255,.20)}.empty{color:var(--muted);padding:6px}.error{color:#ffc0c5;font-size:12px}
+.bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(1,9,20,.96);border-top:1px solid #17395b;padding:8px 10px calc(8px + env(safe-area-inset-bottom));z-index:20}.bottomin{display:flex;gap:8px;width:min(920px,100%);margin:auto}.bottom button{flex:1;border-radius:12px;padding:13px 8px;color:#fff;font-weight:1000;font-size:15px;border:1px solid #13a0ff;background:linear-gradient(180deg,#168cff,#0860d9);box-shadow:0 0 14px rgba(0,145,255,.25)}.bottom .stop{background:linear-gradient(180deg,#c9273d,#7d1525);border-color:#ff4a62}.bottom .secondary{background:linear-gradient(180deg,#42121a,#16070b);border-color:#ff334d;color:#fff;box-shadow:0 0 14px rgba(255,30,60,.28)}.hide{display:none!important}
+@media(max-width:620px){body{padding-inline:8px}.hero{grid-template-columns:1.08fr .92fr;gap:7px}.brand{padding:11px 12px}.wt{font-size:21px}.f2hero{font-size:25px}.f2hero b{font-size:31px}.heroSub{font-size:11px}.marks{font-size:20px;gap:11px}.quickbox{padding:9px}.online,.offline{font-size:14px}.clock{font-size:27px}.bike{font-size:31px}.card{padding:10px}.grid{gap:7px}.venue{padding:9px;min-height:80px}.name{font-size:16px}.tag{font-size:12px;padding:4px 6px}.result{grid-template-columns:76px 1fr}.raceNo{font-size:27px}.title{font-size:17px}.num{width:30px;height:30px}}
+@media(max-width:390px){.hero{grid-template-columns:1fr}.quick{grid-template-columns:1fr 1fr;grid-template-rows:auto}.clockbox{min-height:74px}.bike{display:none}.legendTop{display:none}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="hero">
+    <div class="brand">
+      <div class="wt">WINTICKET</div>
+      <div class="f2hero"><b>F2</b> 巡回ツール</div>
+      <div class="heroSub">今日の開催場を取得 → 対象レースを自動検索</div>
+      <div class="marks"><span class="m1">◎</span><span class="m2">○</span><span class="m3">△</span><span class="m4">×</span></div>
+      <div class="legendTop"><b>M</b>=モーニング / <b>D</b>=デイ / <b>N</b>=ナイター / <b>MN</b>=ミッドナイト</div>
+    </div>
+    <div class="quick">
+      <div class="quickbox connection">
+        <div id="pc" class="offline">● PC未接続</div>
+        <div id="pcDetail" class="pcSub">PC側の agent を起動してください。</div>
+      </div>
+      <div class="quickbox clockbox"><div><div class="clockLabel">◷ 現在時刻</div><div id="clock" class="clock">--:--</div></div><div class="bike">🚴</div></div>
+    </div>
+  </header>
 
-<section class="card">
-  <div class="title">PC接続</div>
-  <div id="pc" class="offline">● PC未接続</div>
-  <div id="pcDetail" class="detail">PC側の agent を起動してください。</div>
-</section>
+  <section class="card">
+    <div class="titleRow"><div class="title"><span class="num">01</span>今日の開催場</div><div id="selectedTop" class="selTop">選択中 0場</div></div>
+    <div id="board" class="grid"><div class="empty">PC接続後に「今日の開催場を取得」を押してください。</div></div>
+    <div id="selected" class="detail">選択中 0場</div>
+    <div class="detail">F2だけチェックできます。 M=モーニング / D=デイ / N=ナイター / MN=ミッドナイト</div>
+  </section>
 
-<section class="card">
-  <div class="title">① 今日の開催場</div>
-  <div id="board" class="grid"><div class="empty">PC接続後に「今日の開催場を取得」を押してください。</div></div>
-  <div id="selected" class="detail">選択中 0場</div>
-  <div class="detail">F2だけチェックできます。M=モーニング / D=デイ / N=ナイター / MN=ミッドナイト</div>
-</section>
+  <section class="card">
+    <div class="titleRow"><div class="title"><span class="num">02</span>進行状況</div></div>
+    <div id="status" class="current">待機中</div>
+    <div id="current" class="detail">現在：—</div>
+    <div id="detail" class="detail"></div>
+    <div class="track"><div id="fill" class="fill"></div></div>
+    <div class="metrics">
+      <div class="metric">確認<b><span id="checked">0</span>R</b></div>
+      <div class="metric">星2<b><span id="star">0</span>R</b></div>
+      <div class="metric">該当<b><span id="match">0</span>R</b></div>
+    </div>
+  </section>
 
-<section class="card">
-  <div class="title">進行状況</div>
-  <div id="status" class="current">待機中</div>
-  <div id="current" class="detail">現在：—</div>
-  <div id="detail" class="detail"></div>
-  <div class="track"><div id="fill" class="fill"></div></div>
-  <div class="metrics">
-    <div class="metric">確認 <b id="checked">0</b>R</div>
-    <div class="metric">星2 <b id="star">0</b>R</div>
-    <div class="metric">該当 <b id="match">0</b>R</div>
-  </div>
-</section>
-
-<section class="card">
-  <div class="title">② 該当レース</div>
-  <div id="results"><div class="empty">まだ検索していません。</div></div>
-  <div id="errors" class="error"></div>
-</section>
+  <section class="card">
+    <div class="titleRow"><div class="title"><span class="num">03</span>該当レース</div></div>
+    <div id="results"><div class="empty">まだ検索していません。</div></div>
+    <div id="errors" class="error"></div>
+  </section>
+</div>
 
 <div class="bottom"><div class="bottomin">
   <button id="load">今日の開催場を取得</button>
@@ -58,38 +110,35 @@ let boardKey="",selectedSlugs=new Set();
 const CONTROL_KEY=localStorage.getItem("wt_control_key")||"";
 const headers={"Content-Type":"application/json",...(CONTROL_KEY?{"X-Control-Key":CONTROL_KEY}:{})};
 
+function tickClock(){const d=new Date();$("clock").textContent=d.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",hour12:false})}
 function selected(){return [...document.querySelectorAll(".venueCheck:checked")].map(x=>x.value)}
-function updateSelected(){selectedSlugs=new Set(selected());$("selected").textContent=`選択中 ${selectedSlugs.size}場`}
+function updateSelected(){selectedSlugs=new Set(selected());const t=`選択中 ${selectedSlugs.size}場`;$("selected").textContent=t;$("selectedTop").textContent=t}
 function renderBoard(items){
-  const key=JSON.stringify(items); if(key===boardKey)return; boardKey=key;
+  const key=JSON.stringify(items);if(key===boardKey)return;boardKey=key;
   if(!items.length){$("board").innerHTML='<div class="empty">開催場をまだ取得していません。</div>';return}
   $("board").innerHTML=items.map(v=>{
-    const grade=v.grade||"?", selectable=grade==="F2", cls=grade==="F2"?"f2":grade==="F1"?"f1":"unknown";
+    const grade=v.grade||"?",selectable=grade==="F2",cls=grade==="F2"?"f2":grade==="F1"?"f1":"unknown";
     const checked=selectedSlugs.has(v.slug)&&selectable?"checked":"";
-    return `<label class="venue ${selectable?"":"disabled"}"><input class="venueCheck" type="checkbox" value="${esc(v.slug)}" ${checked} ${selectable?"":"disabled"}><div class="name">${esc(v.venue)}</div><div class="tags"><span class="tag ${cls}">${esc(grade)}</span><span class="tag">${esc(v.session||"?")}</span></div></label>`
+    const ses=v.session||"?",sesCls=`session-${ses.replace(/[^A-Z]/g,"")}`;
+    return `<label class="venue ${selectable?"":"disabled"}"><input class="venueCheck" type="checkbox" value="${esc(v.slug)}" ${checked} ${selectable?"":"disabled"}><div class="name">${esc(v.venue)}</div><div class="tags"><span class="tag ${cls}">${esc(grade)}</span><span class="tag ${sesCls}">${esc(ses)}</span></div></label>`
   }).join("");
-  document.querySelectorAll(".venueCheck").forEach(e=>e.onchange=updateSelected); updateSelected();
+  document.querySelectorAll(".venueCheck").forEach(e=>e.onchange=updateSelected);updateSelected();
 }
 function renderResults(rows){
-  $("results").innerHTML=rows.length?rows.map(r=>`<div class="result"><b>${esc(r.venue)} ${esc(r.race)}R</b><div class="detail">${esc(r.star||"")} / ${esc(r.line||"")} / ${esc(r.three_order||"")}</div><a class="go" target="_blank" rel="noopener" href="${esc(r.winticket_url||r.prediction_url||"#")}">WINTICKETで見る</a></div>`).join(""):'<div class="empty">現在の該当レースなし</div>';
+  $("results").innerHTML=rows.length?rows.map(r=>`<div class="result"><div class="raceBig"><div class="raceVenue">${esc(r.venue)}</div><div class="raceNo">${esc(r.race)}R</div></div><div><div class="resultMeta">${esc(r.star||"")} / ${esc(r.line||"")} / ${esc(r.three_order||"")}</div><a class="go" target="_blank" rel="noopener" href="${esc(r.winticket_url||r.prediction_url||"#")}">WINTICKETで見る　›</a></div></div>`).join(""):'<div class="empty">現在の該当レースなし</div>';
 }
-function pct(s,c){
-  if(s.phase==="select"||s.phase==="done")return 100;
-  const total=Number(c.selected_venues||c.board_total||0), done=Number(c.venue_index||c.board_done||0);
-  if(total>0)return Math.max(3,Math.min(99,Math.round(done/total*100)));
-  return s.running?12:0;
-}
+function pct(s,c){if(s.phase==="select"||s.phase==="done")return 100;const total=Number(c.selected_venues||c.board_total||0),done=Number(c.venue_index||c.board_done||0);if(total>0)return Math.max(3,Math.min(99,Math.round(done/total*100)));return s.running?12:0}
 async function post(url,body){const r=await fetch(url,{method:"POST",headers,body:body?JSON.stringify(body):null});let d={};try{d=await r.json()}catch(e){}return{http:r.status,...d}}
 async function update(){
   try{
     const s=await(await fetch("/api/status",{cache:"no-store"})).json(),c=s.counters||{};
-    $("pc").textContent=s.agent_online?"● PC接続中":"● PC未接続"; $("pc").className=s.agent_online?"online":"offline";
+    $("pc").textContent=s.agent_online?"● PC接続中":"● PC未接続";$("pc").className=s.agent_online?"online":"offline";
     $("pcDetail").textContent=s.agent_online?"取得処理はPC側で実行されます。":"PC側の agent を起動してください。";
     $("status").textContent=({idle:"待機中",queued:"PC応答待ち",board:"開催場取得中",select:"開催場を選択",races:"検索中",done:"検索完了",stopped:"途中停止",error:"エラー"})[s.phase]||s.phase;
-    $("current").textContent="現在："+(s.current||"—"); $("detail").textContent=s.detail||"";
-    $("checked").textContent=c.checked_races||0; $("star").textContent=c.star2||0; $("match").textContent=(s.matches||[]).length;
+    $("current").textContent="現在："+(s.current||"—");$("detail").textContent=s.detail||"";
+    $("checked").textContent=c.checked_races||0;$("star").textContent=c.star2||0;$("match").textContent=(s.matches||[]).length;
     $("fill").style.width=pct(s,c)+"%";
-    renderBoard(s.venues_info||[]); renderResults(s.matches||[]);
+    renderBoard(s.venues_info||[]);renderResults(s.matches||[]);
     $("errors").innerHTML=(s.errors||[]).map(e=>`<div>${esc(e)}</div>`).join("");
     $("load").classList.toggle("hide",s.running||s.phase!=="idle"||!s.agent_online);
     $("search").classList.toggle("hide",s.running||s.phase!=="select"||!s.agent_online);
@@ -100,20 +149,10 @@ async function update(){
 $("load").onclick=async()=>{const d=await post("/api/control/load-board");if(!d.ok)alert(d.reason||"開始できません");update()};
 $("search").onclick=async()=>{const a=selected();if(!a.length)return alert("F2開催場をチェックしてください");const d=await post("/api/control/search",{selected:a});if(!d.ok)alert(d.reason||"検索開始できません");update()};
 $("stop").onclick=async()=>{await post("/api/control/stop");update()};
-$("reset").onclick=async()=>{
-  const d=await post("/api/control/reset");
-  if(d.ok){
-    boardKey="";
-    selectedSlugs.clear();
-    renderBoard([]);
-    renderResults([]);
-    $("selected").textContent="選択中 0場";
-    $("checked").textContent="0";
-    $("star").textContent="0";
-    $("match").textContent="0";
-    $("fill").style.width="0%";
-  }
-  update();
-};
-update();setInterval(update,1200);
-</script></body></html>
+// 「終了」は検索状態だけリセット。開催場一覧とチェックは残す。
+$("reset").onclick=async()=>{const d=await post("/api/control/reset");if(d.ok){renderResults([]);$("checked").textContent="0";$("star").textContent="0";$("match").textContent="0";$("fill").style.width="0%"}update()};
+
+tickClock();setInterval(tickClock,1000);update();setInterval(update,1200);
+</script>
+</body>
+</html>
