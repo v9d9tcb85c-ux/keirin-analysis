@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION="mobile-select-v2.3-board-fallback"
+ENGINE_VERSION="mobile-select-v2.4-board-timeout-safe"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -170,6 +170,43 @@ def goto(page, url, stop_event=None):
             f"url={url} error={type(e).__name__}:{e}"
         )
         raise
+
+
+def goto_board(page, url, stop_event=None):
+    """
+    開催場一覧/開催場メタ情報専用。
+    Render上では6秒だとWINTICKETのDOMContentLoaded待ちが間に合わないことがあるため、
+    ここだけ最大12秒にする。レース巡回側の goto() は従来どおり6秒のまま。
+    タイムアウトしても本文が取れていれば成功扱いにし、同一URLの自動再試行はしない。
+    """
+    _check_stop(stop_event)
+    timeout_ms = 12000
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        _check_stop(stop_event)
+        page.wait_for_timeout(150)
+        _check_stop(stop_event)
+        body = _body_text(page)
+        if body:
+            return body
+        raise RuntimeError("ページ本文を取得できません")
+    except StopRequested:
+        raise
+    except Exception as e:
+        _check_stop(stop_event)
+        body = _body_text(page)
+        if body:
+            _log(
+                f"BOARD_GOTO_PARTIAL_OK attempt=1/1 timeout_ms={timeout_ms} "
+                f"url={url} error={type(e).__name__}:{e}"
+            )
+            return body
+        _log(
+            f"BOARD_GOTO_FAIL attempt=1/1 timeout_ms={timeout_ms} "
+            f"url={url} error={type(e).__name__}:{e}"
+        )
+        raise
+
 
 def parse_grade(text):
     """
@@ -446,18 +483,45 @@ def _session_from_live_card(text):
 
 
 def _live_card_info_from_anchor(anchor):
-    """開催場リンクから、現在R/発走時刻/F1・F2が入る最小の局所DOMを取る。"""
+    """
+    開催場リンクの近くから、その場だけの「R/発走時刻/F1・F2」を拾う。
+    同じカード内でF1/F2が少し離れていても取れるよう、祖先＋直近兄弟を候補化する。
+    ページ全体本文は使わず、別会場の級を混ぜない。
+    """
     try:
         return anchor.evaluate(r"""e=>{
+          const candidates=[];
+          const add=(t,bonus=0)=>{
+            t=(t||'').trim();
+            if(!t || t.length>1800) return;
+            let score=bonus;
+            if(/(?:F1|F2)/.test(t)) score+=8;
+            if(/(?:\d{1,2})R/.test(t)) score+=5;
+            if(/発走\s*\d{1,2}:\d{2}/.test(t)) score+=5;
+            else if(/発走|締切|投票|結果|終了/.test(t)) score+=2;
+            if(score>0) candidates.push({t,score,len:t.length});
+          };
+
           let n=e;
-          let fallback='';
           for(let k=0;k<12 && n;k++,n=n.parentElement){
-            const t=(n.innerText||n.textContent||'').trim();
-            if(!t || t.length>900) continue;
-            if(!fallback && (/(?:\d{1,2})R/.test(t) || /発走|締切|投票|結果|終了/.test(t))) fallback=t;
-            if((/(?:\d{1,2})R/.test(t) || /発走|締切|投票|結果|終了/.test(t)) && /(?:F1|F2)/.test(t)) return t;
+            const t=(n.innerText||n.textContent||'');
+            add(t, 12-k);
+
+            // 級表示がカード内の隣ブロックに分かれている場合を拾う。
+            if(n.parentElement){
+              const sibs=[...n.parentElement.children];
+              const idx=sibs.indexOf(n);
+              for(let j=Math.max(0,idx-2); j<=Math.min(sibs.length-1,idx+2); j++){
+                if(j===idx) continue;
+                const s=sibs[j];
+                add((s.innerText||s.textContent||''), 4);
+              }
+            }
           }
-          return fallback;
+
+          candidates.sort((a,b)=>b.score-a.score || a.len-b.len);
+          const best=candidates.find(x=>/(?:F1|F2)/.test(x.t) && /(?:\d{1,2})R|発走|締切|投票|結果|終了/.test(x.t));
+          return (best||candidates[0]||{t:''}).t;
         }""") or ""
     except Exception:
         return ""
@@ -466,7 +530,7 @@ def _live_card_info_from_anchor(anchor):
 def _venue_meta(page, slug, stop_event=None):
     """トップで級が取れない時だけ、公開の競輪場ページから本日の級/開催区分を補完する。"""
     url=f"{BASE}/keirin/{slug}"
-    text=goto(page,url,stop_event)
+    text=goto_board(page,url,stop_event)
     # 本日のレースの塊だけを優先し、「今月のレース」以降の別開催を混ぜない。
     local=text
     m=re.search(r"本日のレース(?P<body>.*?)(?:今月のレース|競輪場情報|$)", text, re.S)
@@ -487,7 +551,7 @@ def discover_today_board(page,today,stop_event):
     - それが取れない場合は「開催中のレース」周辺の場名リンクへフォールバック。
     - F1/F2がトップで取れない場だけ公開の競輪場ページで補完する。
     """
-    goto(page, f"{BASE}/keirin", stop_event)
+    goto_board(page, f"{BASE}/keirin", stop_event)
 
     discovered=[]
     seen=set()
@@ -562,6 +626,8 @@ def discover_today_board(page,today,stop_event):
             missing.append(row)
 
     # 級が見えない時だけ各場ページへ。1場失敗しても一覧全体は捨てない。
+    if missing:
+        _log(f"BOARD_META_FALLBACK count={len(missing)}")
     for row in missing:
         _check_stop(stop_event)
         try:
@@ -610,6 +676,12 @@ def load_today_board(progress=None,stop_event=None):
           _close_session(browser,context,page)
     except StopRequested:
       return {"venues_info":[],"counters":c,"errors":[],"stopped":True}
+    except Exception as e:
+      c["errors"] += 1
+      msg=f"開催場取得: {type(e).__name__}: {e}"
+      _log(f"BOARD_LOAD_FAIL error={type(e).__name__}:{e}")
+      _progress(progress,c,phase="error",current="開催場取得エラー",detail=msg,venues_info=[])
+      return {"venues_info":[],"counters":c,"errors":[msg],"stopped":False}
 
 def scan_selected(selected,board,progress=None,stop_event=None):
     progress=progress or (lambda x:None);today=_today_jst();selected=set(selected or [])
@@ -690,4 +762,3 @@ def scan_selected(selected,board,progress=None,stop_event=None):
         return result
     except StopRequested:
       result["stopped"]=True;_progress(progress,c,phase="stopped",current="途中停止",detail="停止しました",matches=list(result["matches"]),venues_info=board);return result
-
