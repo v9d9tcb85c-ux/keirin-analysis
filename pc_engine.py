@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION="pc-bridge-v1.5-keirin-top-only-retry"
+ENGINE_VERSION="pc-bridge-v1.6-staged-board"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -788,183 +788,258 @@ def _venue_meta(page,slug,stop_event):
     return "", "?"
 
 
+
+def _today_venue_names_from_top_section(page):
+    """
+    /keirin の上部「本日開催中の競輪場」セクションだけから会場名を取る。
+    F1/F2や時間帯は一切条件にしないので、まず今日の場だけを確実に反映できる。
+    """
+    try:
+        venue_map = dict(VENUES)
+        rows = page.evaluate(r"""(venueMap)=>{
+          const normalize=s=>(s||'').replace(/\s+/g,'').trim();
+          const all=[...document.querySelectorAll('body *')];
+
+          // 見出し文字列を持つ、なるべく小さい要素を探す。
+          const heads=all.filter(el=>{
+            const t=normalize(el.innerText||el.textContent||'');
+            return t.includes('本日開催中の') && t.includes('競輪場') && t.length<=80;
+          });
+
+          const candidates=[];
+          for(const h of heads){
+            let n=h;
+            for(let k=0;k<9 && n;k++,n=n.parentElement){
+              const txt=(n.innerText||n.textContent||'').trim();
+              if(!txt || txt.length>2200) continue;
+              if(txt.includes('昨日開催') || txt.includes('明日開催') || txt.includes('開催中のレース')) continue;
+
+              const found=[];
+              for(const a of n.querySelectorAll('a[href*="/keirin/"]')){
+                const href=a.getAttribute('href')||'';
+                const m=href.match(/\/keirin\/([^/?#]+)/);
+                if(!m) continue;
+                const slug=m[1];
+                const venue=Object.keys(venueMap).find(v=>venueMap[v]===slug);
+                if(!venue) continue;
+                if(!found.some(x=>x.slug===slug)) found.push({venue,slug});
+              }
+              if(found.length>=1 && found.length<=20){
+                candidates.push({rows:found,len:txt.length,depth:k});
+              }
+            }
+          }
+
+          if(!candidates.length) return [];
+          // 8場に固定しない。会場リンクを複数含み、最小のセクションを優先。
+          candidates.sort((a,b)=>{
+            const am=a.rows.length>=2?0:1, bm=b.rows.length>=2?0:1;
+            return am-bm || a.len-b.len || a.depth-b.depth;
+          });
+          return candidates[0].rows;
+        }""", venue_map) or []
+        return [
+            {"venue":x.get("venue",""),"slug":x.get("slug","")}
+            for x in rows
+            if x.get("venue") and x.get("slug")
+        ]
+    except Exception as e:
+        _log(f"BOARD_TOP_SECTION_PARSE_FAIL error={type(e).__name__}:{e}")
+        return []
+
+
+def _same_page_card_meta(page, venue, slug):
+    """
+    同じ /keirin ページ内だけで、対象会場の開催カードから級と時間帯を補完する。
+    他URLには絶対に遷移しない。
+    """
+    empty={"grade":"?","session":"?","card_text":"","icon_meta":[]}
+    try:
+        links=page.locator(f'a[href*="/keirin/{slug}"]')
+        best=None
+        for i in range(min(links.count(), 20)):
+            a=links.nth(i)
+            try:
+                if not a.is_visible(timeout=200):
+                    continue
+            except Exception:
+                continue
+
+            card=_live_card_info_from_anchor(a,venue)
+            if not isinstance(card,dict):
+                continue
+            txt=card.get("text","") or ""
+            grade=parse_board_grade(txt)
+            if grade not in ("F1","F2","G1","G2","G3"):
+                continue
+
+            icons=card.get("icons",[]) or []
+            scan_ok=bool(card.get("icon_scan_ok",False))
+            session=_session_from_live_card(txt,icons,scan_ok)
+            candidate={
+                "grade":grade,
+                "session":session,
+                "card_text":txt,
+                "icon_meta":icons,
+            }
+            # 最小の局所カードを優先。
+            if best is None or len(txt)<len(best["card_text"]):
+                best=candidate
+
+        return best or empty
+    except Exception as e:
+        _log(f"BOARD_META_SAME_PAGE_FAIL venue={venue} error={type(e).__name__}:{e}")
+        return empty
+
+
 def discover_today_board(page,today,stop_event,progress=None,counters=None):
     """
-    今日の開催場取得は、絶対にこの1URLだけを使う:
-        https://www.winticket.jp/keirin
+    段階反映版。
 
-    他URL・各開催場ページ・昨日/明日ページには一切遷移しない。
+    開催場取得中に使うURLは絶対に
+      https://www.winticket.jp/keirin
+    だけ。他URLへは遷移しない。
 
-    取得方法:
-    - /keirin 上で「現在表示されている」開催カードだけを見る。
-    - 会場名 + 開催グレード(F1/F2/G1/G2/G3) が同一カード内にあるものだけ採用。
-    - display:none 等の昨日/明日カードは is_visible() で除外。
-    - 同じ会場が上部等に重複しても slug で1件にする。
-    - 取得失敗時は同じ /keirin を再読込するだけ。
+    段階:
+      1) 「本日開催中の競輪場」から会場名だけ取得 → 即スマホへ反映
+      2) 同じページ内で各場の F1/F2/G1/G2/G3 を順次反映
+      3) 同じカードの太陽/月/夜空から M/N/MN、無ければDを順次反映
 
-    リトライ:
-    1回目: 即時
-    2回目: 2秒後
-    3回目: 5秒後
-    PC側での公開1ページ取得なので、短すぎず待たせすぎない設定。
+    1段階目が取れない時だけ同じURLをリトライ:
+      即時 → 2秒後 → 5秒後
     """
     progress = progress or (lambda x: None)
     counters = counters if counters is not None else {}
-    counters["board_stage"] = 1
-    counters["board_done"] = 0
-    counters["board_total"] = 0
-    counters["board_attempt"] = 0
+    counters.update({
+        "board_stage":1,
+        "board_done":0,
+        "board_total":0,
+        "board_attempt":0,
+    })
 
-    only_url = f"{BASE}/keirin"
-    retry_waits_ms = [0, 2000, 5000]
-    last_error = None
+    only_url=f"{BASE}/keirin"
+    retry_waits_ms=[0,2000,5000]
+    last_error=None
+    venue_rows=None
 
-    for attempt, wait_ms in enumerate(retry_waits_ms, 1):
+    # ---------- 第1段階: 今日の会場名だけ ----------
+    for attempt,wait_ms in enumerate(retry_waits_ms,1):
         _check_stop(stop_event)
-        counters["board_attempt"] = attempt
+        counters["board_attempt"]=attempt
 
         if wait_ms:
             _progress(
-                progress, counters,
+                progress,counters,
                 phase="board",
-                current=f"開催場取得を再試行待ち ({attempt}/3)",
-                detail=f"同じWINTICKET競輪トップだけを{wait_ms//1000}秒後に再読込します。"
+                current=f"今日の開催場を再確認 ({attempt}/3)",
+                detail=f"同じ競輪トップだけを{wait_ms//1000}秒後に再読込します。"
             )
             page.wait_for_timeout(wait_ms)
             _check_stop(stop_event)
 
-        _progress(
-            progress, counters,
-            phase="board",
-            current=f"WINTICKET競輪トップ確認中 ({attempt}/3)",
-            detail="https://www.winticket.jp/keirin 以外には移動しません。"
-        )
-
         try:
-            # Strict guard: board discovery must never navigate anywhere else.
-            goto_board(page, only_url, stop_event)
-
-            # Safety check after navigation as well.
-            current_url = (page.url or "").rstrip("/")
-            expected = only_url.rstrip("/")
-            if current_url != expected:
-                raise RuntimeError(
-                    f"開催場取得中に許可以外のURLへ遷移しました: {current_url}"
-                )
-
-            counters["board_stage"] = 2
             _progress(
-                progress, counters,
+                progress,counters,
                 phase="board",
-                current=f"本日開催カードを抽出中 ({attempt}/3)",
-                detail="画面上で現在表示されている開催カードだけを確認します。"
+                current=f"今日の開催場を取得中 ({attempt}/3)",
+                detail="WINTICKET競輪トップ1ページだけを確認しています。"
             )
+            goto_board(page,only_url,stop_event)
 
-            discovered = []
-            seen = set()
+            current=(page.url or "").rstrip("/")
+            if current!=only_url.rstrip("/"):
+                raise RuntimeError(f"許可以外のURLへ遷移しました: {current}")
 
-            # We intentionally do NOT use top-page-recent-race-venue.
-            # Search all venue links on this one page, then keep only visible cards
-            # whose isolated local card contains an actual event grade.
-            links = page.locator('a[href*="/keirin/"]')
-            count = links.count()
+            venue_rows=_today_venue_names_from_top_section(page)
+            if not venue_rows:
+                raise RuntimeError("「本日開催中の競輪場」から会場名を取得できません")
 
-            for i in range(count):
-                _check_stop(stop_event)
-                a = links.nth(i)
-
-                try:
-                    if not a.is_visible(timeout=250):
-                        continue
-                except Exception:
-                    continue
-
-                href = a.get_attribute("href") or ""
-                m = re.search(r"/keirin/([^/?#]+)", href)
-                if not m:
-                    continue
-                slug = m.group(1)
-                venue = next((name for name, sl in VENUES.items() if sl == slug), "")
-                if not venue or slug in seen:
-                    continue
-
-                card = _live_card_info_from_anchor(a, venue)
-                if not isinstance(card, dict):
-                    continue
-                card_text = card.get("text", "") or ""
-                grade = parse_board_grade(card_text)
-
-                # Footer links/top bulletin links have no event grade in their own card.
-                # Only actual current-day race cards survive this check.
-                if grade not in ("F1","F2","G1","G2","G3"):
-                    continue
-
-                icon_meta = card.get("icons", []) or []
-                icon_scan_ok = bool(card.get("icon_scan_ok", False))
-                session = _session_from_live_card(card_text, icon_meta, icon_scan_ok)
-
-                seen.add(slug)
-                discovered.append({
-                    "venue": venue,
-                    "slug": slug,
-                    "grade": grade,
-                    "session": session,
-                    "card_text": card_text,
-                    "icon_meta": icon_meta,
-                })
-
-            if not discovered:
-                raise RuntimeError("本日開催カードを1件も取得できません")
-
-            # A normal day can have a varying number of venues.
-            # Do not hard-code 8; trust only the visible current-day cards.
-            counters["board_total"] = len(discovered)
-            counters["board_stage"] = 3
-
-            out = []
-            for idx, item in enumerate(discovered, 1):
-                row = {
-                    "venue": item["venue"],
-                    "slug": item["slug"],
-                    "grade": item["grade"],
-                    "session": item["session"],
-                }
-                out.append(row)
-                counters["board_done"] = idx
-                _progress(
-                    progress, counters,
-                    phase="board",
-                    current=f"{item['venue']} を確認 ({idx}/{len(discovered)}場)",
-                    detail=f"グレード：{row['grade']}　開催区分：{row['session']}"
-                )
-                _log(
-                    f"BOARD_VISIBLE_CARD venue={item['venue']} slug={item['slug']} "
-                    f"grade={row['grade']} session={row['session']} "
-                    f"text={repr((item.get('card_text') or '')[:180])} "
-                    f"icons={repr((item.get('icon_meta') or [])[:8])}"
-                )
-
-            _log(
-                f"BOARD_SUCCESS url={only_url} attempt={attempt}/3 "
-                f"venues={len(out)} names={[x['venue'] for x in out]}"
-            )
-            return out
-
+            break
         except StopRequested:
             raise
         except Exception as e:
-            last_error = e
+            last_error=e
             _log(
-                f"BOARD_RETRY url={only_url} attempt={attempt}/3 "
+                f"BOARD_STAGE1_RETRY url={only_url} attempt={attempt}/3 "
                 f"error={type(e).__name__}:{e}"
             )
-            if attempt >= len(retry_waits_ms):
-                break
+            venue_rows=None
 
-    raise RuntimeError(
-        f"WINTICKET競輪トップを3回確認しましたが本日開催場を取得できません: "
-        f"{type(last_error).__name__ if last_error else 'Error'}: {last_error}"
+    if not venue_rows:
+        raise RuntimeError(
+            f"WINTICKET競輪トップを3回確認しましたが今日の開催場を取得できません: "
+            f"{type(last_error).__name__ if last_error else 'Error'}: {last_error}"
+        )
+
+    out=[
+        {"venue":x["venue"],"slug":x["slug"],"grade":"?","session":"?"}
+        for x in venue_rows
+    ]
+    counters["board_total"]=len(out)
+    counters["venues_found"]=len(out)
+    counters["board_stage"]=2
+
+    # ここでまず場名だけ即反映。
+    _progress(
+        progress,counters,
+        phase="board",
+        current=f"今日の開催場 {len(out)}場を取得",
+        detail="会場名を先に反映しました。続けて級・時間帯を確認します。",
+        venues_info=list(out)
     )
+    _log(
+        f"BOARD_STAGE1_SUCCESS url={only_url} venues={len(out)} "
+        f"names={[x['venue'] for x in out]}"
+    )
+
+    # ---------- 第2/3段階: 同じページ内だけで順番に補完 ----------
+    counters["board_stage"]=3
+    for idx,row in enumerate(out,1):
+        _check_stop(stop_event)
+
+        _progress(
+            progress,counters,
+            phase="board",
+            current=f"{row['venue']} の級を確認 ({idx}/{len(out)}場)",
+            detail="同じ競輪トップ内の開催カードだけを確認しています。",
+            venues_info=list(out)
+        )
+
+        meta=_same_page_card_meta(page,row["venue"],row["slug"])
+        row["grade"]=meta.get("grade","?") or "?"
+
+        # 級だけ先に反映。
+        _progress(
+            progress,counters,
+            phase="board",
+            current=f"{row['venue']} {row['grade']} を確認",
+            detail=f"次に開催時間帯を確認します。({idx}/{len(out)}場)",
+            venues_info=list(out)
+        )
+
+        row["session"]=meta.get("session","?") or "?"
+        counters["board_done"]=idx
+
+        # 時間帯まで反映。
+        _progress(
+            progress,counters,
+            phase="board",
+            current=f"{row['venue']} 確認完了 ({idx}/{len(out)}場)",
+            detail=f"グレード：{row['grade']}　開催区分：{row['session']}",
+            venues_info=list(out)
+        )
+        _log(
+            f"BOARD_STAGE_META venue={row['venue']} slug={row['slug']} "
+            f"grade={row['grade']} session={row['session']} "
+            f"text={repr((meta.get('card_text') or '')[:180])} "
+            f"icons={repr((meta.get('icon_meta') or [])[:8])}"
+        )
+
+    _log(
+        f"BOARD_STAGED_SUCCESS url={only_url} venues={len(out)} "
+        f"rows={[(x['venue'],x['grade'],x['session']) for x in out]}"
+    )
+    return out
 
 
 def get_today_races(page,slug,today,stop_event):
@@ -988,7 +1063,7 @@ def load_today_board(progress=None,stop_event=None):
       with sync_playwright() as p:
         try:
           browser,context,page=_open_session(p)
-          _progress(progress,c,phase="board",current="今日の開催場を取得中",detail="「本日開催中の競輪場」カードだけで開催場・F1/F2を確認")
+          _progress(progress,c,phase="board",current="今日の開催場を取得中",detail="まず今日の開催場名を反映し、その後に級・時間帯を順次追加")
           board=discover_today_board(page,today,stop_event,progress,c);c["venues_found"]=len(board);c["board_done"]=len(board);c["board_total"]=len(board)
           _progress(progress,c,phase="select",current="開催場を選択",detail="検索したい場にチェック",venues_info=board)
           return {"venues_info":board,"counters":c,"errors":[],"stopped":False}
