@@ -7,7 +7,7 @@ import json
 
 from engine import scan_today
 
-APP_VERSION="mobile-simple-v2.5.5-integrated-fix"
+APP_VERSION="select-engine-v1.0"
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
 lock = threading.Lock()
@@ -59,6 +59,7 @@ state = {
     "detail":"",
     "last_update":0,
     "matches":[],
+    "venues_info":[],
     "errors":[],
     "skipped":[],
     "counters":dict(EMPTY_COUNTERS),
@@ -91,6 +92,8 @@ def progress_update(p):
             state["counters"]=merged
         if isinstance(p.get("matches"), list):
             state["matches"]=p["matches"]
+        if isinstance(p.get("venues_info"), list):
+            state["venues_info"]=p["venues_info"]
         if "venue_index" in p:
             state["venue_index"]=p.get("venue_index") or 0
         if "venue_total" in p:
@@ -110,6 +113,7 @@ def run_scan():
             "detail":"",
             "last_update":0,
             "matches":[],
+            "venues_info":[],
             "errors":[],
             "skipped":[],
             "counters":dict(EMPTY_COUNTERS),
@@ -125,6 +129,7 @@ def run_scan():
         result=scan_today(progress_update,stop_event)
         with lock:
             state["matches"]=result.get("matches",[])
+            state["venues_info"]=result.get("venues_info",[])
             state["errors"]=result.get("errors",[])
             state["skipped"]=result.get("skipped",[])
             state["counters"]=result.get("counters",dict(EMPTY_COUNTERS))
@@ -206,6 +211,7 @@ def api_reset():
             "detail":"",
             "last_update":0,
             "matches":[],
+            "venues_info":[],
             "errors":[],
             "skipped":[],
             "counters":dict(EMPTY_COUNTERS),
