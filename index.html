@@ -49,6 +49,9 @@ body{
 .bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(1,9,20,.96);border-top:1px solid #17395b;padding:8px 10px calc(8px + env(safe-area-inset-bottom));z-index:20}.bottomin{display:flex;gap:8px;width:min(920px,100%);margin:auto}.bottom button{flex:1;border-radius:12px;padding:13px 8px;color:#fff;font-weight:1000;font-size:15px;border:1px solid #13a0ff;background:linear-gradient(180deg,#168cff,#0860d9);box-shadow:0 0 14px rgba(0,145,255,.25)}.bottom .stop{background:linear-gradient(180deg,#c9273d,#7d1525);border-color:#ff4a62}.bottom .secondary{background:linear-gradient(180deg,#42121a,#16070b);border-color:#ff334d;color:#fff;box-shadow:0 0 14px rgba(255,30,60,.28)}.hide{display:none!important}
 @media(max-width:620px){body{padding-inline:8px}.hero{grid-template-columns:1.08fr .92fr;gap:7px}.brand{padding:11px 12px}.wt{font-size:21px}.f2hero{font-size:25px}.f2hero b{font-size:31px}.heroSub{font-size:11px}.marks{font-size:20px;gap:11px}.quickbox{padding:9px}.online,.offline{font-size:14px}.clock{font-size:27px}.bike{font-size:31px}.card{padding:10px}.grid{gap:7px}.venue{padding:9px;min-height:80px}.name{font-size:16px}.tag{font-size:12px;padding:4px 6px}.result{grid-template-columns:76px 1fr}.raceNo{font-size:27px}.title{font-size:17px}.num{width:30px;height:30px}}
 @media(max-width:390px){.hero{grid-template-columns:1fr}.quick{grid-template-columns:1fr 1fr;grid-template-rows:auto}.clockbox{min-height:74px}.bike{display:none}.legendTop{display:none}}
+
+.bottom #retry{background:linear-gradient(180deg,#168cff,#0860d9);border-color:#13a0ff;color:#fff}
+.bottom #reset{background:linear-gradient(180deg,#26384d,#101b2a);border-color:#617a95;color:#fff;box-shadow:none}
 </style>
 </head>
 <body>
@@ -101,6 +104,7 @@ body{
   <button id="load">今日の開催場を取得</button>
   <button id="search" class="hide">チェックした場を検索</button>
   <button id="stop" class="stop hide">途中停止</button>
+  <button id="retry" class="hide">再検索</button>
   <button id="reset" class="secondary hide">終了</button>
 </div></div>
 
@@ -143,12 +147,16 @@ async function update(){
     $("load").classList.toggle("hide",s.running||s.phase!=="idle"||!s.agent_online);
     $("search").classList.toggle("hide",s.running||!["select","stopped","done"].includes(s.phase)||!s.agent_online);
     $("stop").classList.toggle("hide",!s.running);$("stop").disabled=!!s.stop_requested||s.phase==="stopping";
+    const retryReady=!s.running&&["stopped","done"].includes(s.phase)&&selectedSlugs.size>0&&s.agent_online;
+    $("retry").classList.toggle("hide",!retryReady);
+    $("retry").disabled=!retryReady;
     $("reset").classList.toggle("hide",s.running||!["select","done","stopped","error"].includes(s.phase));
   }catch(e){$("pc").textContent="● Render通信エラー";$("pc").className="offline"}
 }
 $("load").onclick=async()=>{const d=await post("/api/control/load-board");if(!d.ok)alert(d.reason||"開始できません");update()};
 $("search").onclick=async()=>{const a=selected();if(!a.length)return alert("F2開催場をチェックしてください");const d=await post("/api/control/search",{selected:a});if(!d.ok)alert(d.reason||"検索開始できません");update()};
-$("stop").onclick=async()=>{await post("/api/control/stop");update()};
+$("retry").onclick=async()=>{if($("search").disabled)return;await $("search").onclick()};
+$("stop").onclick=async()=>{$("stop").disabled=true;$("stop").textContent="停止処理中…";await post("/api/control/stop");update()};
 // 「終了」は検索状態だけリセット。開催場一覧とチェックは残す。
 $("reset").onclick=async()=>{const d=await post("/api/control/reset");if(d.ok){renderResults([]);$("checked").textContent="0";$("star").textContent="0";$("match").textContent="0";$("fill").style.width="0%"}update()};
 
