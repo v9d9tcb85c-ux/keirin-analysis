@@ -182,6 +182,32 @@ def reset():
         })
     return jsonify(ok=True)
 
+
+@app.post("/api/control/hard-reset")
+def hard_reset():
+    if not control_ok():
+        return jsonify(ok=False, reason="unauthorized"), 401
+
+    with lock:
+        if state["running"]:
+            return jsonify(ok=False, reason="running"), 409
+
+        state.update({
+            "phase": "idle",
+            "running": False,
+            "current": "",
+            "detail": "",
+            "venues_info": [],
+            "matches": [],
+            "errors": [],
+            "counters": {},
+            "pending_command": None,
+            "active_command_id": None,
+            "stop_requested": False,
+            "updated_at": now(),
+        })
+    return jsonify(ok=True)
+
 @app.get("/api/agent/next")
 def agent_next():
     if not agent_ok():

@@ -52,6 +52,7 @@ body{
 
 .bottom #retry{background:linear-gradient(180deg,#168cff,#0860d9);border-color:#13a0ff;color:#fff}
 .bottom #reset{background:linear-gradient(180deg,#26384d,#101b2a);border-color:#617a95;color:#fff;box-shadow:none}
+.bottom #hardReset{background:linear-gradient(180deg,#4b1f2a,#2a1016);border-color:#8d3a4a;color:#ffd8df}
 </style>
 </head>
 <body>
@@ -106,6 +107,7 @@ body{
   <button id="stop" class="stop hide">途中停止</button>
   <button id="retry" class="hide">再検索</button>
   <button id="reset" class="secondary hide">終了</button>
+  <button id="hardReset" class="secondary">完全リセット</button>
 </div></div>
 
 <script>
@@ -147,6 +149,7 @@ async function update(){
     $("load").classList.toggle("hide",s.running||s.phase!=="idle"||!s.agent_online);
     $("search").classList.toggle("hide",s.running||!["select","stopped","done"].includes(s.phase)||!s.agent_online);
     $("stop").classList.toggle("hide",!s.running);$("stop").disabled=!!s.stop_requested||s.phase==="stopping";
+$("hardReset").disabled=s.running;
     const retryReady=!s.running&&["stopped","done"].includes(s.phase)&&selectedSlugs.size>0&&s.agent_online;
     $("retry").classList.toggle("hide",!retryReady);
     $("retry").disabled=!retryReady;
@@ -159,6 +162,26 @@ $("retry").onclick=async()=>{if($("search").disabled)return;await $("search").on
 $("stop").onclick=async()=>{$("stop").disabled=true;$("stop").textContent="停止処理中…";await post("/api/control/stop");update()};
 // 「終了」は検索状態だけリセット。開催場一覧とチェックは残す。
 $("reset").onclick=async()=>{const d=await post("/api/control/reset");if(d.ok){renderResults([]);$("checked").textContent="0";$("star").textContent="0";$("match").textContent="0";$("fill").style.width="0%"}update()};
+$("hardReset").onclick=async()=>{
+  if(lastState&&lastState.running){
+    alert("検索中です。先に「途中停止」を押してください。");
+    return;
+  }
+  if(!confirm("完全リセットします。開催場一覧・チェック・検索結果・進捗を全部消します。よろしいですか？")) return;
+  const d=await post("/api/control/hard-reset",{});
+  if(d.ok){
+    boardKey="";
+    selectedSlugs.clear();
+    renderBoard([]);
+    renderResults([]);
+    $("selected").textContent="選択中 0場";
+    $("checked").textContent="0";
+    $("star").textContent="0";
+    $("match").textContent="0";
+    $("fill").style.width="0%";
+  }
+  update();
+};
 
 tickClock();setInterval(tickClock,1000);update();setInterval(update,1200);
 </script>
