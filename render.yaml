@@ -1,6 +1,0 @@
-services:
-  - type: web
-    name: winticket-select-engine
-    env: docker
-    plan: free
-    autoDeploy: true
