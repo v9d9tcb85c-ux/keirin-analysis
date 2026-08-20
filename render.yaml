@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: keirin-analysis
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    healthCheckPath: /health
+    name: winticket-select-engine
+    env: docker
+    plan: free
+    autoDeploy: true
