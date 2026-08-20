@@ -1,171 +1,195 @@
-from flask import Flask, jsonify, send_from_directory, request
+from flask import Flask, jsonify, request, send_from_directory
 from pathlib import Path
-import threading
-import os
-
-from engine import load_today_board, scan_selected, ENGINE_VERSION
+from threading import Lock
+import os, time, uuid
 
 app = Flask(__name__)
-BASE_DIR = Path(__file__).parent
-lock = threading.Lock()
-stop_event = threading.Event()
+BASE = Path(__file__).resolve().parent
+lock = Lock()
+
+AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "").strip()
+CONTROL_KEY = os.environ.get("CONTROL_KEY", "").strip()
 
 state = {
-    "running": False,
+    "agent_online": False,
+    "agent_last_seen": 0.0,
     "phase": "idle",
+    "running": False,
     "current": "",
     "detail": "",
     "venues_info": [],
     "matches": [],
     "errors": [],
     "counters": {},
+    "pending_command": None,
+    "active_command_id": None,
+    "updated_at": time.time(),
 }
 
+def now():
+    return time.time()
 
-def progress(payload):
+def control_ok():
+    if not CONTROL_KEY:
+        return True
+    got = request.headers.get("X-Control-Key", "") or request.args.get("key", "")
+    return got == CONTROL_KEY
+
+def agent_ok():
+    if not AGENT_TOKEN:
+        return False
+    return request.headers.get("X-Agent-Token", "") == AGENT_TOKEN
+
+def public_state():
     with lock:
-        for key, value in payload.items():
-            if key == "counters":
-                state["counters"] = value
-            elif key in state:
-                state[key] = value
+        s = dict(state)
+        s["agent_online"] = bool(s["agent_last_seen"] and now() - s["agent_last_seen"] < 12)
+        s.pop("pending_command", None)
+        return s
 
-
-def board_job():
-    try:
-        result = load_today_board(progress, stop_event)
-        with lock:
-            state.update({
-                "venues_info": result.get("venues_info", []),
-                "counters": result.get("counters", {}),
-                "errors": result.get("errors", []),
-                "phase": "stopped" if result.get("stopped") else "select",
-                "current": "途中停止" if result.get("stopped") else "開催場を選択",
-                "detail": "F2など検索したい開催場にチェックしてください。",
-            })
-    except Exception as exc:
-        with lock:
-            state.update({
-                "phase": "error",
-                "current": "開催場取得エラー",
-                "venues_info": [],
-                "matches": [],
-                "counters": {},
-                "errors": [f"{type(exc).__name__}: {exc}"],
-            })
-    finally:
-        with lock:
-            state["running"] = False
-
-
-def search_job(selected):
-    try:
-        with lock:
-            board = list(state["venues_info"])
-        result = scan_selected(selected, board, progress, stop_event)
-        with lock:
-            state.update({
-                "matches": result.get("matches", []),
-                "errors": result.get("errors", []),
-                "counters": result.get("counters", {}),
-                "phase": "stopped" if result.get("stopped") else "done",
-                "current": "途中停止" if result.get("stopped") else "検索完了",
-                "detail": "停止しました。" if result.get("stopped") else "選択した開催場の検索が完了しました。",
-            })
-    except Exception as exc:
-        with lock:
-            state.update({
-                "phase": "error",
-                "current": "検索エラー",
-                "errors": [f"{type(exc).__name__}: {exc}"],
-            })
-    finally:
-        with lock:
-            state["running"] = False
-
+def enqueue(kind, payload=None):
+    with lock:
+        if state["pending_command"] is not None:
+            return None
+        cid = uuid.uuid4().hex
+        state["pending_command"] = {
+            "id": cid,
+            "kind": kind,
+            "payload": payload or {},
+            "created_at": now(),
+        }
+        state["active_command_id"] = cid
+        state["updated_at"] = now()
+        return cid
 
 @app.get("/")
 def index():
-    return send_from_directory(BASE_DIR, "index.html")
-
+    return send_from_directory(BASE, "index.html")
 
 @app.get("/api/status")
 def status():
-    with lock:
-        return jsonify(dict(state))
+    return jsonify(public_state())
 
-
-@app.post("/api/load-venues")
-def load_venues():
+@app.post("/api/control/load-board")
+def load_board():
+    if not control_ok():
+        return jsonify(ok=False, reason="unauthorized"), 401
+    s = public_state()
+    if not s["agent_online"]:
+        return jsonify(ok=False, reason="pc_offline"), 409
+    if s["running"]:
+        return jsonify(ok=False, reason="running"), 409
+    cid = enqueue("load_board")
+    if not cid:
+        return jsonify(ok=False, reason="command_pending"), 409
     with lock:
-        if state["running"]:
-            return jsonify(ok=False, reason="running"), 409
         state.update({
             "running": True,
-            "phase": "board",
-            "current": "今日の開催場を取得中",
-            "detail": "WINTICKETの開催一覧1ページを確認しています。",
+            "phase": "queued",
+            "current": "PCへ開催場取得を依頼中",
+            "detail": "PC側の取得エンジンが開始するのを待っています。",
             "venues_info": [],
             "matches": [],
             "errors": [],
             "counters": {},
         })
-        stop_event.clear()
-    threading.Thread(target=board_job, daemon=True, name="board-job").start()
-    return jsonify(ok=True)
+    return jsonify(ok=True, command_id=cid)
 
-
-@app.post("/api/search-selected")
-def search_selected():
+@app.post("/api/control/search")
+def search():
+    if not control_ok():
+        return jsonify(ok=False, reason="unauthorized"), 401
+    s = public_state()
+    if not s["agent_online"]:
+        return jsonify(ok=False, reason="pc_offline"), 409
+    if s["running"]:
+        return jsonify(ok=False, reason="running"), 409
     selected = (request.get_json(silent=True) or {}).get("selected") or []
+    valid = {x.get("slug") for x in s.get("venues_info", [])}
+    selected = [x for x in selected if x in valid]
+    if not selected:
+        return jsonify(ok=False, reason="no_selection"), 400
+    cid = enqueue("search_selected", {"selected": selected})
+    if not cid:
+        return jsonify(ok=False, reason="command_pending"), 409
     with lock:
-        if state["running"]:
-            return jsonify(ok=False, reason="running"), 409
-        valid = {item.get("slug") for item in state["venues_info"]}
-        selected = [slug for slug in selected if slug in valid]
-        if not selected:
-            return jsonify(ok=False, reason="no_selection"), 400
         state.update({
             "running": True,
-            "phase": "races",
-            "current": "検索準備中",
-            "detail": f"選択した{len(selected)}場だけを検索します。",
+            "phase": "queued",
+            "current": "PCへ検索を依頼中",
+            "detail": f"選択した{len(selected)}場をPC側で検索します。",
             "matches": [],
             "errors": [],
         })
-        stop_event.clear()
-    threading.Thread(target=search_job, args=(selected,), daemon=True, name="search-job").start()
-    return jsonify(ok=True)
+    return jsonify(ok=True, command_id=cid)
 
-
-@app.post("/api/stop")
+@app.post("/api/control/stop")
 def stop():
-    stop_event.set()
-    return jsonify(ok=True)
+    if not control_ok():
+        return jsonify(ok=False, reason="unauthorized"), 401
+    cid = enqueue("stop")
+    if not cid:
+        # Stop is important: overwrite a stale non-stop command if necessary.
+        with lock:
+            cid = uuid.uuid4().hex
+            state["pending_command"] = {"id": cid, "kind": "stop", "payload": {}, "created_at": now()}
+    return jsonify(ok=True, command_id=cid)
 
-
-@app.post("/api/reset")
+@app.post("/api/control/reset")
 def reset():
+    if not control_ok():
+        return jsonify(ok=False, reason="unauthorized"), 401
     with lock:
         if state["running"]:
             return jsonify(ok=False, reason="running"), 409
         state.update({
-            "running": False,
-            "phase": "idle",
-            "current": "",
-            "detail": "",
-            "venues_info": [],
-            "matches": [],
-            "errors": [],
-            "counters": {},
+            "phase": "idle", "running": False, "current": "", "detail": "",
+            "venues_info": [], "matches": [], "errors": [], "counters": {},
+            "updated_at": now(),
         })
     return jsonify(ok=True)
 
+@app.get("/api/agent/next")
+def agent_next():
+    if not agent_ok():
+        return jsonify(ok=False), 401
+    with lock:
+        state["agent_last_seen"] = now()
+        cmd = state["pending_command"]
+        state["pending_command"] = None
+        state["updated_at"] = now()
+    return jsonify(ok=True, command=cmd)
+
+@app.post("/api/agent/progress")
+def agent_progress():
+    if not agent_ok():
+        return jsonify(ok=False), 401
+    data = request.get_json(silent=True) or {}
+    with lock:
+        state["agent_last_seen"] = now()
+        for k in ("phase","running","current","detail","venues_info","matches","errors","counters"):
+            if k in data:
+                state[k] = data[k]
+        state["updated_at"] = now()
+    return jsonify(ok=True)
+
+@app.post("/api/agent/finish")
+def agent_finish():
+    if not agent_ok():
+        return jsonify(ok=False), 401
+    data = request.get_json(silent=True) or {}
+    with lock:
+        state["agent_last_seen"] = now()
+        for k in ("phase","current","detail","venues_info","matches","errors","counters"):
+            if k in data:
+                state[k] = data[k]
+        state["running"] = False
+        state["updated_at"] = now()
+    return jsonify(ok=True)
 
 @app.get("/health")
 def health():
-    return jsonify(ok=True, app_version="mobile-select-v2.3", engine_version=ENGINE_VERSION)
-
+    return jsonify(ok=True, role="relay-only", browser="none")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "10000")))
