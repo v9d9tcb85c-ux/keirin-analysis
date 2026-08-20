@@ -48,6 +48,9 @@ def board_job():
             state.update({
                 "phase": "error",
                 "current": "開催場取得エラー",
+                "venues_info": [],
+                "matches": [],
+                "counters": {},
                 "errors": [f"{type(exc).__name__}: {exc}"],
             })
     finally:
@@ -161,7 +164,7 @@ def reset():
 
 @app.get("/health")
 def health():
-    return jsonify(ok=True, app_version="mobile-select-v2.2", engine_version=ENGINE_VERSION)
+    return jsonify(ok=True, app_version="mobile-select-v2.3", engine_version=ENGINE_VERSION)
 
 
 if __name__ == "__main__":

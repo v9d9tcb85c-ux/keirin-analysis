@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION="mobile-select-v2.2-session-fix"
+ENGINE_VERSION="mobile-select-v2.3-board-fallback"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -445,82 +445,140 @@ def _session_from_live_card(text):
     return "D"
 
 
+def _live_card_info_from_anchor(anchor):
+    """開催場リンクから、現在R/発走時刻/F1・F2が入る最小の局所DOMを取る。"""
+    try:
+        return anchor.evaluate(r"""e=>{
+          let n=e;
+          let fallback='';
+          for(let k=0;k<12 && n;k++,n=n.parentElement){
+            const t=(n.innerText||n.textContent||'').trim();
+            if(!t || t.length>900) continue;
+            if(!fallback && (/(?:\d{1,2})R/.test(t) || /発走|締切|投票|結果|終了/.test(t))) fallback=t;
+            if((/(?:\d{1,2})R/.test(t) || /発走|締切|投票|結果|終了/.test(t)) && /(?:F1|F2)/.test(t)) return t;
+          }
+          return fallback;
+        }""") or ""
+    except Exception:
+        return ""
+
+
+def _venue_meta(page, slug, stop_event=None):
+    """トップで級が取れない時だけ、公開の競輪場ページから本日の級/開催区分を補完する。"""
+    url=f"{BASE}/keirin/{slug}"
+    text=goto(page,url,stop_event)
+    # 本日のレースの塊だけを優先し、「今月のレース」以降の別開催を混ぜない。
+    local=text
+    m=re.search(r"本日のレース(?P<body>.*?)(?:今月のレース|競輪場情報|$)", text, re.S)
+    if m:
+        local=m.group('body')
+    grade=parse_grade(local)
+    session=_session(local)
+    return grade,session
+
+
 def discover_today_board(page,today,stop_event):
     """
-    WINTICKET競輪トップ /keirin の「開催中のレース」本日表示から、
-    開催場・F1/F2・M/D/N/MN を1ページで取得する。
+    WINTICKET競輪トップ /keirin から本日開催場を取得する。
 
-    以前の /keirin/racecard/YYYYMMDD はF1/F2バッジとのDOM距離が遠く
-    「?」になりやすかったため使わない。
+    v2.3:
+    - F1/F2を同一祖先DOMに必須としない。
+    - 「本日開催中の競輪場」に付く ref=top-page-recent-race-venue のリンクを第一候補にする。
+    - それが取れない場合は「開催中のレース」周辺の場名リンクへフォールバック。
+    - F1/F2がトップで取れない場だけ公開の競輪場ページで補完する。
     """
     goto(page, f"{BASE}/keirin", stop_event)
-    rev = {v: k for k, v in VENUES.items()}
 
-    # 初期表示は「本日開催」だが、念のためタブが押せる場合は明示的に選択。
+    discovered=[]
+    seen=set()
+
+    # もっとも安定: トップ上部「本日開催中の競輪場」専用リンク。
     try:
-        tab = page.get_by_text("本日開催", exact=True)
-        if tab.count():
-            tab.first.click(timeout=1500)
-            page.wait_for_timeout(150)
-    except Exception:
-        pass
+        links=page.locator('a[href*="top-page-recent-race-venue"]')
+        for i in range(links.count()):
+            _check_stop(stop_event)
+            a=links.nth(i)
+            href=a.get_attribute('href') or ''
+            m=re.search(r"/keirin/([^/?#]+)",href)
+            if not m: continue
+            slug=m.group(1)
+            venue=next((name for name,sl in VENUES.items() if sl==slug), '')
+            if not venue or slug in seen: continue
+            seen.add(slug)
+            discovered.append({"venue":venue,"slug":slug,"text":_live_card_info_from_anchor(a)})
+    except Exception as e:
+        _log(f"BOARD_PRIMARY_LINKS_FAIL error={type(e).__name__}:{e}")
 
-    # 実画面のカードをDOMで抽出する。場名リンクから祖先へ上がり、
-    # F1/F2とR/発走/投票を含む最小カードを採用する。
-    cards = page.evaluate(r"""(venues)=>{
-      const isVisible = e => !!(e && (e.offsetWidth || e.offsetHeight || e.getClientRects().length));
-      const out=[];
-      for (const venue of venues) {
-        const candidates=[...document.querySelectorAll('a,button,div,span')]
-          .filter(e => isVisible(e) && (e.innerText||'').trim() === venue);
-        let best=null;
-        for (const el of candidates) {
-          let n=el;
-          for (let k=0;k<10 && n;k++,n=n.parentElement) {
-            const t=(n.innerText||'').trim();
-            if (!t || t.length>650) continue;
-            if (/\bF[12]\b/.test(t) && (/(?:\d{1,2})R/.test(t) || /発走/.test(t) || /投票|結果/.test(t))) {
-              best=n; break;
-            }
-          }
-          if (best) break;
-        }
-        if (!best) continue;
-        const links=[...best.querySelectorAll('a[href]')].map(a=>a.getAttribute('href')||'');
-        out.push({venue, text:(best.innerText||'').trim(), hrefs:links});
-      }
-      return out;
-    }""", list(VENUES.keys())) or []
+    # フォールバック: 専用refが変わっても、開催中のレース周辺から場名を拾う。
+    if not discovered:
+        try:
+            data=page.evaluate(r"""(venueMap)=>{
+              const out=[];
+              const headings=[...document.querySelectorAll('h1,h2,h3,div,span')]
+                .filter(e=>(e.innerText||'').trim()==='開催中のレース');
+              let root=headings[0]||document.body;
+              if(root!==document.body){
+                for(let k=0;k<4 && root.parentElement;k++) root=root.parentElement;
+              }
+              const anchors=[...root.querySelectorAll('a[href]')];
+              for(const a of anchors){
+                const href=a.getAttribute('href')||'';
+                const mm=href.match(/\/keirin\/([^/?#]+)/);
+                if(!mm) continue;
+                const slug=mm[1];
+                const venue=Object.keys(venueMap).find(v=>venueMap[v]===slug);
+                if(!venue) continue;
+                const label=(a.innerText||a.textContent||'').trim();
+                if(label!==venue && label!==venue+'競輪' && !label.includes(venue)) continue;
+                let n=a, text='';
+                for(let j=0;j<10&&n;j++,n=n.parentElement){
+                  const t=(n.innerText||n.textContent||'').trim();
+                  if(t.length<900 && (/(?:\d{1,2})R/.test(t)||/発走|投票|結果|終了/.test(t))){text=t;break;}
+                }
+                out.push({venue,slug,text});
+              }
+              return out;
+            }""", VENUES) or []
+            for x in data:
+                if x.get('slug') not in seen:
+                    seen.add(x.get('slug'))
+                    discovered.append(x)
+        except Exception as e:
+            _log(f"BOARD_FALLBACK_LINKS_FAIL error={type(e).__name__}:{e}")
 
-    out=[]; seen=set()
-    for card in cards:
+    if not discovered:
+        raise RuntimeError("競輪トップから本日の開催場リンクを取得できません")
+
+    # トップで取れる情報を先に採用。
+    out=[]
+    missing=[]
+    for item in discovered:
+        text=item.get('text','') or ''
+        grade=parse_grade(text)
+        session=_session_from_live_card(text)
+        row={"venue":item['venue'],"slug":item['slug'],"grade":grade or "?","session":session}
+        out.append(row)
+        if grade not in ('F1','F2'):
+            missing.append(row)
+
+    # 級が見えない時だけ各場ページへ。1場失敗しても一覧全体は捨てない。
+    for row in missing:
         _check_stop(stop_event)
-        venue = card.get("venue", "")
-        if venue not in VENUES or venue in seen:
-            continue
-        text = card.get("text", "") or ""
-        grade = parse_grade(text)
-        if grade not in ("F1", "F2"):
-            continue
-        slug = VENUES[venue]
+        try:
+            g,sess=_venue_meta(page,row['slug'],stop_event)
+            if g in ('F1','F2'):
+                row['grade']=g
+            # 場ページに明示的な開催区分がある場合は推定より優先。
+            if sess in ('M','D','N','MN'):
+                row['session']=sess
+        except StopRequested:
+            raise
+        except Exception as e:
+            _log_venue(row['venue'],'META_FALLBACK_FAIL',error=f"{type(e).__name__}:{e}")
 
-        # href側に実slugが含まれていればそちらを優先（名称辞書変更への耐性）。
-        for href in card.get("hrefs", []) or []:
-            m = re.search(r"/keirin/([^/]+)/(?:racecard|raceresult|predictions|odds|live)", href)
-            if m and m.group(1) in rev:
-                slug = m.group(1)
-                break
-
-        seen.add(venue)
-        out.append({
-            "venue": venue,
-            "slug": slug,
-            "grade": grade,
-            "session": _session_from_live_card(text),
-        })
-
-    if not out:
-        raise RuntimeError("競輪トップの『開催中のレース』から本日の開催場/F1・F2を取得できません")
+    # 1件も級が取れなかった場合だけエラー。開催場自体は取れているので原因を分ける。
+    if not any(x.get('grade') in ('F1','F2') for x in out):
+        raise RuntimeError("本日の開催場は取得できましたがF1/F2を取得できません")
     return out
 
 def get_today_races(page,slug,today,stop_event):
