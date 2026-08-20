@@ -89,7 +89,7 @@ async function update(){
     $("current").textContent="現在："+(s.current||"—"); $("detail").textContent=s.detail||"";
     $("checked").textContent=c.checked_races||0; $("star").textContent=c.star2||0; $("match").textContent=(s.matches||[]).length;
     $("fill").style.width=pct(s,c)+"%";
-    if(s.venues_info?.length)renderBoard(s.venues_info); renderResults(s.matches||[]);
+    renderBoard(s.venues_info||[]); renderResults(s.matches||[]);
     $("errors").innerHTML=(s.errors||[]).map(e=>`<div>${esc(e)}</div>`).join("");
     $("load").classList.toggle("hide",s.running||s.phase!=="idle"||!s.agent_online);
     $("search").classList.toggle("hide",s.running||s.phase!=="select"||!s.agent_online);
@@ -100,6 +100,20 @@ async function update(){
 $("load").onclick=async()=>{const d=await post("/api/control/load-board");if(!d.ok)alert(d.reason||"開始できません");update()};
 $("search").onclick=async()=>{const a=selected();if(!a.length)return alert("F2開催場をチェックしてください");const d=await post("/api/control/search",{selected:a});if(!d.ok)alert(d.reason||"検索開始できません");update()};
 $("stop").onclick=async()=>{await post("/api/control/stop");update()};
-$("reset").onclick=async()=>{const d=await post("/api/control/reset");if(d.ok){boardKey="";selectedSlugs.clear()}update()};
+$("reset").onclick=async()=>{
+  const d=await post("/api/control/reset");
+  if(d.ok){
+    boardKey="";
+    selectedSlugs.clear();
+    renderBoard([]);
+    renderResults([]);
+    $("selected").textContent="選択中 0場";
+    $("checked").textContent="0";
+    $("star").textContent="0";
+    $("match").textContent="0";
+    $("fill").style.width="0%";
+  }
+  update();
+};
 update();setInterval(update,1200);
 </script></body></html>
