@@ -161,7 +161,7 @@ def reset():
 
 @app.get("/health")
 def health():
-    return jsonify(ok=True, app_version="mobile-select-v2.0", engine_version=ENGINE_VERSION)
+    return jsonify(ok=True, app_version="mobile-select-v2.1", engine_version=ENGINE_VERSION)
 
 
 if __name__ == "__main__":
