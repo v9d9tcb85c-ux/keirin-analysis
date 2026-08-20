@@ -134,15 +134,15 @@ async function update(){
     const s=await(await fetch("/api/status",{cache:"no-store"})).json(),c=s.counters||{};
     $("pc").textContent=s.agent_online?"● PC接続中":"● PC未接続";$("pc").className=s.agent_online?"online":"offline";
     $("pcDetail").textContent=s.agent_online?"取得処理はPC側で実行されます。":"PC側の agent を起動してください。";
-    $("status").textContent=({idle:"待機中",queued:"PC応答待ち",board:"開催場取得中",select:"開催場を選択",races:"検索中",done:"検索完了",stopped:"途中停止",error:"エラー"})[s.phase]||s.phase;
+    $("status").textContent=({idle:"待機中",queued:"PC応答待ち",board:"開催場取得中",select:"開催場を選択",races:"検索中",done:"検索完了",stopped:"途中停止",stopping:"停止処理中",error:"エラー"})[s.phase]||s.phase;
     $("current").textContent="現在："+(s.current||"—");$("detail").textContent=s.detail||"";
     $("checked").textContent=c.checked_races||0;$("star").textContent=c.star2||0;$("match").textContent=(s.matches||[]).length;
     $("fill").style.width=pct(s,c)+"%";
     renderBoard(s.venues_info||[]);renderResults(s.matches||[]);
     $("errors").innerHTML=(s.errors||[]).map(e=>`<div>${esc(e)}</div>`).join("");
     $("load").classList.toggle("hide",s.running||s.phase!=="idle"||!s.agent_online);
-    $("search").classList.toggle("hide",s.running||s.phase!=="select"||!s.agent_online);
-    $("stop").classList.toggle("hide",!s.running);
+    $("search").classList.toggle("hide",s.running||!["select","stopped","done"].includes(s.phase)||!s.agent_online);
+    $("stop").classList.toggle("hide",!s.running);$("stop").disabled=!!s.stop_requested||s.phase==="stopping";
     $("reset").classList.toggle("hide",s.running||!["select","done","stopped","error"].includes(s.phase));
   }catch(e){$("pc").textContent="● Render通信エラー";$("pc").className="offline"}
 }

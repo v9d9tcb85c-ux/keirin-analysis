@@ -23,6 +23,7 @@ state = {
     "counters": {},
     "pending_command": None,
     "active_command_id": None,
+    "stop_requested": False,
     "updated_at": time.time(),
 }
 
@@ -92,6 +93,7 @@ def load_board():
             "matches": [],
             "errors": [],
             "counters": {},
+            "stop_requested": False,
         })
     return jsonify(ok=True, command_id=cid)
 
@@ -120,6 +122,7 @@ def search():
             "detail": f"選択した{len(selected)}場をPC側で検索します。",
             "matches": [],
             "errors": [],
+            "stop_requested": False,
         })
     return jsonify(ok=True, command_id=cid)
 
@@ -127,12 +130,31 @@ def search():
 def stop():
     if not control_ok():
         return jsonify(ok=False, reason="unauthorized"), 401
-    cid = enqueue("stop")
-    if not cid:
-        # Stop is important: overwrite a stale non-stop command if necessary.
-        with lock:
-            cid = uuid.uuid4().hex
-            state["pending_command"] = {"id": cid, "kind": "stop", "payload": {}, "created_at": now()}
+
+    with lock:
+        # すでに止まっているなら、stopコマンドを増やさずそのまま成功扱い。
+        if not state["running"]:
+            state["stop_requested"] = False
+            return jsonify(ok=True, already_stopped=True)
+
+        # 1回stopを送った後は、同じstopを何度押しても二重送信しない。
+        if state.get("stop_requested"):
+            return jsonify(ok=True, already_requested=True)
+
+        cid = uuid.uuid4().hex
+        state["pending_command"] = {
+            "id": cid,
+            "kind": "stop",
+            "payload": {},
+            "created_at": now(),
+        }
+        state["active_command_id"] = cid
+        state["stop_requested"] = True
+        state["phase"] = "stopping"
+        state["current"] = "停止処理中"
+        state["detail"] = "現在のレース処理が安全に止まるのを待っています。"
+        state["updated_at"] = now()
+
     return jsonify(ok=True, command_id=cid)
 
 @app.post("/api/control/reset")
@@ -142,9 +164,20 @@ def reset():
     with lock:
         if state["running"]:
             return jsonify(ok=False, reason="running"), 409
+
+        has_venues = bool(state.get("venues_info"))
         state.update({
-            "phase": "idle", "running": False, "current": "", "detail": "",
-            "venues_info": [], "matches": [], "errors": [], "counters": {},
+            # 終了後も開催場一覧は保持し、同じチェックで再検索できるようにする。
+            "phase": "select" if has_venues else "idle",
+            "running": False,
+            "current": "開催場を選択" if has_venues else "",
+            "detail": "F2開催場にチェックしてください。" if has_venues else "",
+            "matches": [],
+            "errors": [],
+            "counters": {},
+            "pending_command": None,
+            "active_command_id": None,
+            "stop_requested": False,
             "updated_at": now(),
         })
     return jsonify(ok=True)
@@ -184,6 +217,10 @@ def agent_finish():
             if k in data:
                 state[k] = data[k]
         state["running"] = False
+        state["stop_requested"] = False
+        # 停止完了後に古いstop命令が残っていた場合は破棄する。
+        if state.get("pending_command") and state["pending_command"].get("kind") == "stop":
+            state["pending_command"] = None
         state["updated_at"] = now()
     return jsonify(ok=True)
 
