@@ -7,7 +7,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.winticket.jp"
-ENGINE_VERSION="pc-bridge-v1.3-today-card-girls-first"
+ENGINE_VERSION="pc-bridge-v1.4.1-no-icon-is-day"
 TARGET_STAR = 2
 TARGET_LINES = {"3.2.2", "2.3.2", "2.2.3"}
 TARGET_ORDERS = {"◎○△", "◎○×"}
@@ -516,14 +516,142 @@ def _session(text):
         if min(times)<=10*60:return "M"
     return "D"
 
-def _session_from_live_card(text):
+def _rgb_to_hue(rgb_text):
     """
-    「本日開催中の競輪場」カードの現在Rと時刻から M/D/N/MN を推定する。
-    発走時刻が無い場合は、締切時刻も利用する。
-    根拠となる時刻が取れない場合は誤判定を避けて「?」を返す。
+    CSS rgb()/rgba() 文字列を hue(0-360), saturation(0-1), lightness(0-1) に変換。
+    解析不能/透明色は None。
     """
-    text = text or ""
+    if not rgb_text:
+        return None
+    m = re.search(
+        r"rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)"
+        r"(?:\s*,\s*(\d+(?:\.\d+)?))?\s*\)",
+        str(rgb_text)
+    )
+    if not m:
+        return None
+    r, g, b = [float(m.group(i)) / 255.0 for i in (1,2,3)]
+    a = float(m.group(4)) if m.group(4) is not None else 1.0
+    if a <= 0.05:
+        return None
 
+    mx, mn = max(r,g,b), min(r,g,b)
+    d = mx - mn
+    l = (mx + mn) / 2.0
+    if d == 0:
+        h = 0.0
+        s = 0.0
+    else:
+        s = d / (1.0 - abs(2.0*l - 1.0)) if l not in (0.0,1.0) else 0.0
+        if mx == r:
+            h = 60.0 * (((g-b)/d) % 6.0)
+        elif mx == g:
+            h = 60.0 * (((b-r)/d) + 2.0)
+        else:
+            h = 60.0 * (((r-g)/d) + 4.0)
+    return h, s, l
+
+
+def _session_from_icon_meta(icon_meta):
+    """
+    WINTICKETの開催カードに表示される時間帯アイコンを判定。
+
+    優先順位:
+      太陽/朝/Morning -> M
+      月/Night       -> N
+      夜空/Midnight  -> MN
+      ハート/Girls   -> 時間帯判定には使わない
+
+    HTML側に意味のある alt/title/aria-label/use href/class/data-* があれば最優先。
+    意味ラベルが無いSVGでも、アイコン専用バッジの背景色を補助的に使う。
+    F1/F2/G1-G3の級バッジはテキストを持つため色判定対象から除外済み。
+    """
+    metas = icon_meta or []
+
+    # 1) Semantic attributes / filenames / SVG use href.
+    for meta in metas:
+        token = " ".join(str(meta.get(k,"")) for k in (
+            "alt","title","aria","src","use","cls","data","text"
+        )).lower()
+
+        # Heart/girls is NOT a session marker.
+        if any(k in token for k in ("heart","girl","girls","ガールズ","女子","favorite","pink")):
+            continue
+
+        if any(k in token for k in (
+            "midnight","mid-night","night-sky","nightsky","夜空","ミッドナイト"
+        )):
+            return "MN"
+        if any(k in token for k in (
+            "morning","sun","sunny","daybreak","朝","モーニング","太陽"
+        )):
+            return "M"
+        if any(k in token for k in (
+            "moon","night","night-race","ナイター","月"
+        )):
+            return "N"
+
+    # 2) Color fallback for icon-only badges.
+    # WINTICKET screenshots/DOM styling:
+    #   orange/yellow icon -> morning
+    #   blue/cyan icon     -> nighter
+    #   violet/purple icon -> midnight
+    #   pink/red icon      -> heart/girls (ignore)
+    candidates=[]
+    for meta in metas:
+        for color_key in ("background","color"):
+            hsl = _rgb_to_hue(meta.get(color_key))
+            if not hsl:
+                continue
+            h,s,l = hsl
+            if s < 0.30 or l < 0.15 or l > 0.90:
+                continue
+            candidates.append((h,s,l,meta))
+
+    for h,s,l,meta in candidates:
+        # pink/red = heart/girls. Never turn this into D/M/N/MN.
+        if h >= 320 or h <= 8:
+            continue
+        if 8 < h < 70:
+            return "M"
+        if 185 <= h < 255:
+            return "N"
+        if 255 <= h < 320:
+            return "MN"
+
+    return ""
+
+
+def _session_from_live_card(text, icon_meta=None, icon_scan_ok=False):
+    """
+    開催区分は同じ開催カード内の時間帯アイコンを最優先する。
+
+      太陽  -> M
+      月    -> N
+      夜空  -> MN
+      上記3つが無い -> D
+
+    ハートはガールズ戦を含む印なので時間帯判定には一切使わない。
+    ハートがあっても無くても、太陽/月/夜空が無ければ D。
+
+    icon_scan_ok=True は「対象カードのアイコン領域を正常に確認できた」ことを意味する。
+    その場合、icon_meta が空でも D と確定する。
+    カード自体のアイコン走査に失敗した場合だけ、時刻から補助推定する。
+    """
+    icon_meta = icon_meta or []
+
+    session = _session_from_icon_meta(icon_meta)
+    if session:
+        return session
+
+    # カード内のアイコンDOMを正常に確認済みなら、
+    # 太陽/月/夜空が見つからない = デイ。
+    # ハートの有無は関係ない。
+    if icon_scan_ok:
+        return "D"
+
+    # アイコン走査そのものができなかった場合だけ時刻で補助推定。
+    text = text or ""
     tm = re.search(r"(?:発走|締切)\s*([0-2]?\d):([0-5]\d)", text)
     rm = re.search(r"(?<!\d)(1[0-2]|[1-9])R(?!\d)", text)
     if not tm:
@@ -531,8 +659,6 @@ def _session_from_live_card(text):
 
     minutes = int(tm.group(1)) * 60 + int(tm.group(2))
     race_no = int(rm.group(1)) if rm else 1
-
-    # 締切は発走より数分早いが、開催区分判定には十分な精度。
     estimated_first = minutes - max(0, race_no - 1) * 25
 
     if estimated_first >= 19 * 60:
@@ -547,12 +673,9 @@ def _session_from_live_card(text):
 def _live_card_info_from_anchor(anchor, venue):
     """
     「本日開催中の競輪場」の1カードだけを読む。
+    会場名/F1-F2と、同じカード内のアイコンDOM情報を返す。
 
-    重要:
-    - 隣カードの兄弟要素は見ない。
-    - ページ上位の巨大な祖先DOMは採用しない。
-    - 対象会場名 + F1/F2 が同時に入る最小祖先だけを採用する。
-    これにより、別セクションのL1/L級や別日の開催場が混ざるのを防ぐ。
+    隣カード・別日カード・注目選手の要素は見ない。
     """
     try:
         venue_names = list(VENUES.keys())
@@ -560,28 +683,103 @@ def _live_card_info_from_anchor(anchor, venue):
           const venue=args.venue;
           const venueNames=args.venueNames||[];
           const candidates=[];
+
+          const venueCount=(t)=>{
+            let n=0;
+            for(const v of venueNames){
+              if(v && t.includes(v)) n++;
+              if(n>=2) break;
+            }
+            return n;
+          };
+
           let n=e;
-          for(let k=0;k<8 && n;k++,n=n.parentElement){
+          for(let k=0;k<9 && n;k++,n=n.parentElement){
             const t=(n.innerText||n.textContent||'').trim();
-            if(!t || t.length>520) continue;
+            if(!t || t.length>650) continue;
             if(!t.includes(venue)) continue;
             if(!/(?:^|[^A-Z0-9])F[12](?:[^A-Z0-9]|$)/.test(t)) continue;
-
-            // 2会場以上の名前が入る祖先は「カード」ではなく一覧コンテナなので除外。
-            let venueCount=0;
-            for(const v of venueNames){
-              if(v && t.includes(v)) venueCount++;
-              if(venueCount>=2) break;
-            }
-            if(venueCount>=2) continue;
-
-            candidates.push(t);
+            if(venueCount(t)>=2) continue;
+            candidates.push({node:n,text:t});
           }
-          candidates.sort((a,b)=>a.length-b.length);
-          return candidates[0]||'';
-        }""", {"venue": venue, "venueNames": venue_names}) or ""
+
+          candidates.sort((a,b)=>a.text.length-b.text.length);
+          const best=candidates[0];
+          if(!best) return {text:'',icons:[],html:'',icon_scan_ok:false};
+
+          const root=best.node;
+          const icons=[];
+          const all=[...root.querySelectorAll('*')];
+
+          for(const el of all){
+            const txt=(el.innerText||el.textContent||'').trim();
+
+            // Grade badges have visible F1/F2/G1-G3 text and are not session icons.
+            if(/^(?:F1|F2|G1|G2|G3)$/.test(txt)) continue;
+            // Ignore ordinary text-heavy elements.
+            if(txt.length>12) continue;
+
+            const hasSvg=!!el.querySelector?.('svg');
+            const hasImg=el.tagName==='IMG' || !!el.querySelector?.('img');
+            const selfSvg=el.tagName==='SVG';
+            const selfImg=el.tagName==='IMG';
+            const aria=el.getAttribute?.('aria-label')||'';
+            const title=el.getAttribute?.('title')||'';
+            const cls=typeof el.className==='string'?el.className:
+                      (el.getAttribute?.('class')||'');
+            const data=[...(el.attributes||[])]
+              .filter(a=>a.name.startsWith('data-'))
+              .map(a=>a.name+'='+a.value).join(' ');
+
+            if(!(hasSvg||hasImg||selfSvg||selfImg||aria||title||
+                 /icon|badge|mark|moon|sun|night|heart|girl|morning|midnight/i.test(cls+' '+data))){
+              continue;
+            }
+
+            const img=(selfImg?el:el.querySelector?.('img'));
+            const svg=(selfSvg?el:el.querySelector?.('svg'));
+            const use=svg?.querySelector?.('use');
+            const style=getComputedStyle(el);
+
+            // Ignore huge containers; session badges are small.
+            const r=el.getBoundingClientRect();
+            if(r.width>80 || r.height>80) continue;
+
+            icons.push({
+              text:txt,
+              alt:img?.getAttribute('alt')||'',
+              src:img?.getAttribute('src')||'',
+              aria:aria || svg?.getAttribute('aria-label') || '',
+              title:title || svg?.querySelector('title')?.textContent || '',
+              use:use?.getAttribute('href') || use?.getAttribute('xlink:href') || '',
+              cls:cls,
+              data:data,
+              background:style.backgroundColor||'',
+              color:style.color||'',
+              width:Math.round(r.width),
+              height:Math.round(r.height)
+            });
+          }
+
+          // De-duplicate nested wrappers describing the same icon.
+          const seen=new Set();
+          const unique=[];
+          for(const x of icons){
+            const key=[x.alt,x.src,x.aria,x.title,x.use,x.cls,x.data,x.background,x.color].join('|');
+            if(seen.has(key)) continue;
+            seen.add(key);
+            unique.push(x);
+          }
+
+          return {
+            text:best.text,
+            icons:unique.slice(0,30),
+            html:(root.innerHTML||'').slice(0,5000),
+            icon_scan_ok:true
+          };
+        }""", {"venue": venue, "venueNames": venue_names}) or {"text":"","icons":[],"html":"","icon_scan_ok":False}
     except Exception:
-        return ""
+        return {"text":"","icons":[],"html":"","icon_scan_ok":False}
 
 
 def _venue_meta(page, slug, stop_event=None):
@@ -649,9 +847,12 @@ def discover_today_board(page,today,stop_event,progress=None,counters=None):
                 continue
             seen.add(slug)
 
-            card_text=_live_card_info_from_anchor(a, venue)
+            card=_live_card_info_from_anchor(a, venue)
+            card_text=card.get("text","") if isinstance(card,dict) else ""
+            icon_meta=card.get("icons",[]) if isinstance(card,dict) else []
+            icon_scan_ok=bool(card.get("icon_scan_ok",False)) if isinstance(card,dict) else False
             grade=parse_board_grade(card_text)
-            session=_session_from_live_card(card_text)
+            session=_session_from_live_card(card_text, icon_meta, icon_scan_ok)
 
             discovered.append({
                 "venue": venue,
@@ -659,6 +860,7 @@ def discover_today_board(page,today,stop_event,progress=None,counters=None):
                 "grade": grade or "?",
                 "session": session,
                 "card_text": card_text,
+                "icon_meta": icon_meta,
             })
     except Exception as e:
         _log(f"BOARD_TODAY_CARDS_FAIL error={type(e).__name__}:{e}")
@@ -689,7 +891,8 @@ def discover_today_board(page,today,stop_event,progress=None,counters=None):
         _log(
             f"BOARD_CARD venue={item['venue']} slug={item['slug']} "
             f"grade={row['grade']} session={row['session']} "
-            f"text={repr((item.get('card_text') or '')[:180])}"
+            f"text={repr((item.get('card_text') or '')[:180])} "
+            f"icons={repr((item.get('icon_meta') or [])[:8])}"
         )
 
     return out
