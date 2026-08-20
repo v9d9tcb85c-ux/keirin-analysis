@@ -1,2 +1,2 @@
-requests>=2.31,<3
-playwright==1.62.0
+Flask>=3.0,<4
+gunicorn>=22,<24
