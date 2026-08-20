@@ -188,7 +188,31 @@ $("search").onclick=async()=>{
   finally{b.disabled=false;b.textContent="チェックした場を検索";}
 };
 
-$("retry").onclick=async()=>{showAction("再検索を開始します","wait");await $("search").onclick();};
+$("retry").onclick=async()=>{
+  const a=selected();
+  if(!a.length){showAction("F2開催場をチェックしてください","err");return alert("F2開催場をチェックしてください");}
+
+  const b=$("retry");
+  b.disabled=true;
+  b.textContent="再検索送信中…";
+  showAction("前回結果を残したまま再検索を開始します…","wait");
+
+  try{
+    const d=await post("/api/control/search",{selected:a,preserve_display:true});
+    if(!d.ok){
+      showAction("再検索を受付できません："+(d.reason||d.http),"err");
+      alert(d.reason||"再検索を開始できません");
+      return;
+    }
+    showAction("再検索受付OK：新しい1R目を確認するまで前回結果を保持します","ok");
+    await update();
+  }catch(e){
+    showAction("通信エラー：再検索命令を送れません","err");
+  }finally{
+    b.disabled=false;
+    b.textContent="再検索";
+  }
+};
 
 $("stop").onclick=async()=>{
   const b=$("stop");b.disabled=true;b.textContent="停止処理中…";showAction("途中停止を受付中…","wait");

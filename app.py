@@ -27,7 +27,9 @@ state = {
     "updated_at": time.time(),
     "last_control": "",
     "last_control_at": 0.0,
+    "retry_preserve": False,
 }
+
 
 
 def now():
@@ -104,6 +106,7 @@ def load_board():
             "errors": [],
             "counters": {},
             "stop_requested": False,
+            "retry_preserve": False,
         })
     return jsonify(ok=True, command_id=cid)
 
@@ -116,7 +119,9 @@ def search():
         return jsonify(ok=False, reason="pc_offline"), 409
     if s["running"]:
         return jsonify(ok=False, reason="running"), 409
-    selected = (request.get_json(silent=True) or {}).get("selected") or []
+    body = request.get_json(silent=True) or {}
+    selected = body.get("selected") or []
+    preserve_display = bool(body.get("preserve_display"))
     valid = {x.get("slug") for x in s.get("venues_info", [])}
     selected = [x for x in selected if x in valid]
     if not selected:
@@ -125,16 +130,24 @@ def search():
     if not cid:
         return jsonify(ok=False, reason="command_pending"), 409
     with lock:
-        mark_control("検索")
-        state.update({
+        mark_control("再検索" if preserve_display else "検索")
+        next_state = {
             "running": True,
             "phase": "queued",
-            "current": "PCへ検索を依頼中",
-            "detail": f"選択した{len(selected)}場をPC側で検索します。",
-            "matches": [],
-            "errors": [],
+            "current": "PCへ再検索を依頼中" if preserve_display else "PCへ検索を依頼中",
+            "detail": (
+                f"前回結果を表示したまま、選択した{len(selected)}場を再検索します。"
+                if preserve_display else
+                f"選択した{len(selected)}場をPC側で検索します。"
+            ),
             "stop_requested": False,
-        })
+            "retry_preserve": preserve_display,
+        }
+        # 通常検索は新規なのでリセット。
+        # 再検索は「押した瞬間」に前回表示を消さない。
+        if not preserve_display:
+            next_state.update({"matches": [], "errors": [], "counters": {}})
+        state.update(next_state)
     return jsonify(ok=True, command_id=cid)
 
 @app.post("/api/control/stop")
@@ -190,6 +203,7 @@ def reset():
             "pending_command": None,
             "active_command_id": None,
             "stop_requested": False,
+            "retry_preserve": False,
             "updated_at": now(),
         })
     return jsonify(ok=True)
@@ -217,6 +231,7 @@ def hard_reset():
             "pending_command": None,
             "active_command_id": None,
             "stop_requested": False,
+            "retry_preserve": False,
             "updated_at": now(),
         })
     return jsonify(ok=True)
@@ -239,9 +254,26 @@ def agent_progress():
     data = request.get_json(silent=True) or {}
     with lock:
         state["agent_last_seen"] = now()
+
+        preserve = bool(state.get("retry_preserve"))
+        incoming_counters = data.get("counters") if isinstance(data.get("counters"), dict) else {}
+        fresh_checked = int(incoming_counters.get("checked_races") or 0)
+        fresh_matches = data.get("matches") if isinstance(data.get("matches"), list) else []
+
+        # 再検索開始直後（まだ0R確認）は、前回の件数・該当表示を消さない。
+        # 新しい検索で1R以上確認した瞬間から新しい進捗へ切り替える。
+        fresh_started = fresh_checked > 0 or bool(fresh_matches)
+        if preserve and fresh_started:
+            state["retry_preserve"] = False
+            preserve = False
+
         for k in ("phase","running","current","detail","venues_info","matches","errors","counters"):
-            if k in data:
-                state[k] = data[k]
+            if k not in data:
+                continue
+            if preserve and k in ("matches","errors","counters"):
+                continue
+            state[k] = data[k]
+
         state["updated_at"] = now()
     return jsonify(ok=True)
 
@@ -257,6 +289,7 @@ def agent_finish():
                 state[k] = data[k]
         state["running"] = False
         state["stop_requested"] = False
+        state["retry_preserve"] = False
         # 停止完了後に古いstop命令が残っていた場合は破棄する。
         if state.get("pending_command") and state["pending_command"].get("kind") == "stop":
             state["pending_command"] = None
