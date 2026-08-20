@@ -53,10 +53,16 @@ body{
 .bottom #retry{background:linear-gradient(180deg,#168cff,#0860d9);border-color:#13a0ff;color:#fff}
 .bottom #reset{background:linear-gradient(180deg,#26384d,#101b2a);border-color:#617a95;color:#fff;box-shadow:none}
 .bottom #hardReset{background:linear-gradient(180deg,#4b1f2a,#2a1016);border-color:#8d3a4a;color:#ffd8df}
+
+.actionMsg{margin:0 0 10px;padding:10px 14px;border-radius:12px;border:1px solid #174b79;background:#061a31;color:#9fcfff;font-size:13px;font-weight:800;min-height:18px}
+.actionMsg.ok{border-color:#00a86b;color:#6dffc1;background:#06251f}
+.actionMsg.wait{border-color:#1a91ff;color:#7dd5ff;background:#06223e}
+.actionMsg.err{border-color:#e0445e;color:#ff9dad;background:#2b0d17}
 </style>
 </head>
 <body>
 <div class="shell">
+  <div id="actionMsg" class="actionMsg">操作待機中</div>
   <header class="hero">
     <div class="brand">
       <div class="wt">WINTICKET</div>
@@ -112,7 +118,11 @@ body{
 
 <script>
 const $=id=>document.getElementById(id),esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-let boardKey="",selectedSlugs=new Set();
+let boardKey="",selectedSlugs=new Set(),lastState=null;
+function showAction(text,type="wait"){
+  const el=$("actionMsg");if(!el)return;
+  el.textContent=text;el.className="actionMsg "+type;
+}
 const CONTROL_KEY=localStorage.getItem("wt_control_key")||"";
 const headers={"Content-Type":"application/json",...(CONTROL_KEY?{"X-Control-Key":CONTROL_KEY}:{})};
 
@@ -137,7 +147,7 @@ function pct(s,c){if(s.phase==="select"||s.phase==="done")return 100;const total
 async function post(url,body){const r=await fetch(url,{method:"POST",headers,body:body?JSON.stringify(body):null});let d={};try{d=await r.json()}catch(e){}return{http:r.status,...d}}
 async function update(){
   try{
-    const s=await(await fetch("/api/status",{cache:"no-store"})).json(),c=s.counters||{};
+    const s=await(await fetch("/api/status",{cache:"no-store"})).json(),c=s.counters||{};lastState=s;
     $("pc").textContent=s.agent_online?"● PC接続中":"● PC未接続";$("pc").className=s.agent_online?"online":"offline";
     $("pcDetail").textContent=s.agent_online?"取得処理はPC側で実行されます。":"PC側の agent を起動してください。";
     $("status").textContent=({idle:"待機中",queued:"PC応答待ち",board:"開催場取得中",select:"開催場を選択",races:"検索中",done:"検索完了",stopped:"途中停止",stopping:"停止処理中",error:"エラー"})[s.phase]||s.phase;
@@ -153,34 +163,67 @@ $("hardReset").disabled=s.running;
     const retryReady=!s.running&&["stopped","done"].includes(s.phase)&&selectedSlugs.size>0&&s.agent_online;
     $("retry").classList.toggle("hide",!retryReady);
     $("retry").disabled=!retryReady;
-    $("reset").classList.toggle("hide",s.running||!["select","done","stopped","error"].includes(s.phase));
+    $("reset").classList.toggle("hide",s.running||!["done","stopped","error"].includes(s.phase));
   }catch(e){$("pc").textContent="● Render通信エラー";$("pc").className="offline"}
 }
-$("load").onclick=async()=>{const d=await post("/api/control/load-board");if(!d.ok)alert(d.reason||"開始できません");update()};
-$("search").onclick=async()=>{const a=selected();if(!a.length)return alert("F2開催場をチェックしてください");const d=await post("/api/control/search",{selected:a});if(!d.ok)alert(d.reason||"検索開始できません");update()};
-$("retry").onclick=async()=>{if($("search").disabled)return;await $("search").onclick()};
-$("stop").onclick=async()=>{$("stop").disabled=true;$("stop").textContent="停止処理中…";await post("/api/control/stop");update()};
-// 「終了」は検索状態だけリセット。開催場一覧とチェックは残す。
-$("reset").onclick=async()=>{const d=await post("/api/control/reset");if(d.ok){renderResults([]);$("checked").textContent="0";$("star").textContent="0";$("match").textContent="0";$("fill").style.width="0%"}update()};
+$("load").onclick=async()=>{
+  const b=$("load");b.disabled=true;b.textContent="送信中…";showAction("開催場取得を送信中…","wait");
+  try{
+    const d=await post("/api/control/load-board",{});
+    if(!d.ok){showAction("受付エラー："+(d.reason||d.http),"err");alert(d.reason||"開始できません");return;}
+    showAction("受付OK：PCへ開催場取得命令を渡しました","ok");await update();
+  }catch(e){showAction("通信エラー：開催場取得を送れません","err");}
+  finally{b.disabled=false;b.textContent="今日の開催場を取得";}
+};
+
+$("search").onclick=async()=>{
+  const a=selected();
+  if(!a.length){showAction("F2開催場をチェックしてください","err");return alert("F2開催場をチェックしてください");}
+  const b=$("search");b.disabled=true;b.textContent="送信中…";showAction("検索を送信中…","wait");
+  try{
+    const d=await post("/api/control/search",{selected:a});
+    if(!d.ok){showAction("受付エラー："+(d.reason||d.http),"err");alert(d.reason||"検索開始できません");return;}
+    showAction("受付OK：PCへ検索命令を渡しました","ok");await update();
+  }catch(e){showAction("通信エラー：検索命令を送れません","err");}
+  finally{b.disabled=false;b.textContent="チェックした場を検索";}
+};
+
+$("retry").onclick=async()=>{showAction("再検索を開始します","wait");await $("search").onclick();};
+
+$("stop").onclick=async()=>{
+  const b=$("stop");b.disabled=true;b.textContent="停止処理中…";showAction("途中停止を受付中…","wait");
+  try{
+    const d=await post("/api/control/stop",{});
+    if(!d.ok){showAction("受付エラー："+(d.reason||d.http),"err");return;}
+    showAction("途中停止を受付しました","ok");await update();
+  }catch(e){showAction("通信エラー：途中停止を送れません","err");}
+};
+
+$("reset").onclick=async()=>{
+  const b=$("reset");if(b.disabled)return;b.disabled=true;b.textContent="終了処理中…";showAction("終了処理中…","wait");
+  try{
+    const d=await post("/api/control/reset",{});
+    if(!d.ok){showAction("終了できません："+(d.reason||d.http),"err");return;}
+    renderResults([]);$("checked").textContent="0";$("star").textContent="0";$("match").textContent="0";$("fill").style.width="0%";
+    showAction("終了しました。検索結果をリセットしました（F2チェックは保持）","ok");
+    await update();
+  }catch(e){showAction("終了処理で通信エラー","err");}
+  finally{b.disabled=false;b.textContent="終了";}
+};
+
 $("hardReset").onclick=async()=>{
-  if(lastState&&lastState.running){
-    alert("検索中です。先に「途中停止」を押してください。");
-    return;
-  }
-  if(!confirm("完全リセットします。開催場一覧・チェック・検索結果・進捗を全部消します。よろしいですか？")) return;
-  const d=await post("/api/control/hard-reset",{});
-  if(d.ok){
-    boardKey="";
-    selectedSlugs.clear();
-    renderBoard([]);
-    renderResults([]);
-    $("selected").textContent="選択中 0場";
-    $("checked").textContent="0";
-    $("star").textContent="0";
-    $("match").textContent="0";
-    $("fill").style.width="0%";
-  }
-  update();
+  if(lastState&&lastState.running){showAction("検索中は完全リセットできません","err");return alert("検索中です。先に「途中停止」を押してください。");}
+  if(!confirm("完全リセットします。開催場一覧・チェック・検索結果・進捗を全部消します。よろしいですか？"))return;
+  const b=$("hardReset");b.disabled=true;b.textContent="完全リセット中…";showAction("完全リセット中…","wait");
+  try{
+    const d=await post("/api/control/hard-reset",{});
+    if(!d.ok){showAction("完全リセットできません："+(d.reason||d.http),"err");return;}
+    boardKey="";selectedSlugs.clear();renderBoard([]);renderResults([]);
+    $("selected").textContent="選択中 0場";$("selectedTop").textContent="選択中 0場";
+    $("checked").textContent="0";$("star").textContent="0";$("match").textContent="0";$("fill").style.width="0%";
+    showAction("完全リセット完了","ok");await update();
+  }catch(e){showAction("完全リセットで通信エラー","err");}
+  finally{b.disabled=false;b.textContent="完全リセット";}
 };
 
 tickClock();setInterval(tickClock,1000);update();setInterval(update,1200);

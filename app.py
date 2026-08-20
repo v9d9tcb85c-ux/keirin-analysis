@@ -25,10 +25,18 @@ state = {
     "active_command_id": None,
     "stop_requested": False,
     "updated_at": time.time(),
+    "last_control": "",
+    "last_control_at": 0.0,
 }
+
 
 def now():
     return time.time()
+
+def mark_control(name):
+    state["last_control"] = str(name)
+    state["last_control_at"] = now()
+    state["updated_at"] = now()
 
 def control_ok():
     if not CONTROL_KEY:
@@ -52,6 +60,7 @@ def enqueue(kind, payload=None):
     with lock:
         if state["pending_command"] is not None:
             return None
+        mark_control("途中停止")
         cid = uuid.uuid4().hex
         state["pending_command"] = {
             "id": cid,
@@ -84,6 +93,7 @@ def load_board():
     if not cid:
         return jsonify(ok=False, reason="command_pending"), 409
     with lock:
+        mark_control("今日の開催場を取得")
         state.update({
             "running": True,
             "phase": "queued",
@@ -115,6 +125,7 @@ def search():
     if not cid:
         return jsonify(ok=False, reason="command_pending"), 409
     with lock:
+        mark_control("検索")
         state.update({
             "running": True,
             "phase": "queued",
@@ -166,12 +177,13 @@ def reset():
             return jsonify(ok=False, reason="running"), 409
 
         has_venues = bool(state.get("venues_info"))
+        mark_control("終了")
         state.update({
             # 終了後も開催場一覧は保持し、同じチェックで再検索できるようにする。
             "phase": "select" if has_venues else "idle",
             "running": False,
-            "current": "開催場を選択" if has_venues else "",
-            "detail": "F2開催場にチェックしてください。" if has_venues else "",
+            "current": "終了しました",
+            "detail": "検索結果をリセットしました。F2チェックはそのまま残しています。" if has_venues else "検索状態をリセットしました。",
             "matches": [],
             "errors": [],
             "counters": {},
@@ -192,6 +204,7 @@ def hard_reset():
         if state["running"]:
             return jsonify(ok=False, reason="running"), 409
 
+        mark_control("完全リセット")
         state.update({
             "phase": "idle",
             "running": False,
