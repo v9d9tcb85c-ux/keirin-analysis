@@ -1,9 +1,1 @@
-{
-  "name": "WINTICKET 今日の該当レース",
-  "short_name": "今日検索",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#07111f",
-  "theme_color": "#07111f",
-  "description": "今日開催のF2から、AI予想 星2・指定ライン・◎○△/◎○×を自動検索"
-}
+{"name":"WINTICKET F2巡回","short_name":"F2巡回","start_url":"/","display":"standalone","background_color":"#07111f","theme_color":"#07111f"}

@@ -1,144 +1,16 @@
-<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#07111f">
-<title>WINTICKET F2巡回</title>
-<style>
-:root{color-scheme:dark;--bg:#06101d;--panel:#0d1b2e;--panel2:#0a1626;--line:#294767;--blue:#3b82f6;--green:#6ee7a0;--red:#ff9fa8;--muted:#9db0c8;--amber:#ffd166}
-*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:#fff;margin:0;padding:14px 14px calc(94px + env(safe-area-inset-bottom));max-width:900px;margin-inline:auto}
-h1{font-size:26px;margin:5px 0 2px}.sub{color:var(--muted);font-size:14px;margin:0 0 12px}.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px;margin:12px 0}.cardtitle{font-size:18px;font-weight:900;margin-bottom:10px}.legend{font-size:13px;color:var(--muted);line-height:1.7}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.venue{display:block;background:var(--panel2);border:1px solid var(--line);border-radius:15px;padding:12px;min-height:92px;position:relative;transition:.15s}.venue:has(input:checked){outline:2px solid var(--blue);background:#102543}.venue input{position:absolute;right:10px;top:10px;width:26px;height:26px;accent-color:var(--blue)}.name{font-size:19px;font-weight:900;padding-right:30px}.tags{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}.tag{display:inline-block;border:1px solid #44688f;border-radius:9px;padding:5px 8px;font-weight:900;font-size:14px}.f2{color:var(--green);border-color:#387953}.f1{color:var(--red);border-color:#75444d}.unknown{color:var(--amber)}
-.statusrow{display:flex;gap:8px;flex-wrap:wrap}.metric{background:var(--panel2);border:1px solid var(--line);padding:8px 10px;border-radius:11px;font-size:13px}.metric b{font-size:18px}.current{font-weight:900;font-size:17px;margin:10px 0 3px}.detail{color:var(--muted);font-size:13px;margin:0}.group{border:1px solid var(--line);background:var(--panel2);border-radius:15px;margin:10px 0;overflow:hidden}.grouphead{padding:12px 12px 10px;font-size:19px;font-weight:900;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}.count{font-size:13px;color:var(--green)}.race{padding:12px;border-bottom:1px solid #203a57}.race:last-child{border-bottom:0}.racehead{display:flex;justify-content:space-between;gap:8px;align-items:center}.racename{font-size:19px;font-weight:900}.meta{font-size:13px;color:var(--muted);margin:5px 0 9px}.go{display:block;text-decoration:none;text-align:center;background:var(--blue);color:#fff;font-weight:900;border-radius:11px;padding:11px}.errors{color:#ffc1c5;font-size:13px;white-space:pre-wrap}.empty{color:var(--muted);padding:8px 0}.bottom{position:fixed;z-index:20;left:0;right:0;bottom:0;background:rgba(5,12,22,.97);border-top:1px solid #203650;padding:10px 10px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px}.bottominner{display:flex;gap:8px;width:min(900px,100%);margin:auto}.bottom button{flex:1;border:0;border-radius:13px;padding:14px 8px;color:#fff;background:var(--blue);font-weight:900;font-size:15px}.bottom .stop{background:#963d45}.bottom .secondary{background:#29415c}.hide{display:none!important}.badge{display:inline-block;background:#15385e;border-radius:999px;padding:3px 8px;font-size:12px;color:#bcd8fb}.selected-note{margin:8px 0 0;font-weight:800;color:#bed8f8}
-@media(max-width:420px){body{padding-inline:10px}.grid{gap:7px}.venue{padding:10px;min-height:88px}.name{font-size:17px}.tag{font-size:13px;padding:4px 7px}}
-</style>
-</head>
-<body>
-<h1>WINTICKET F2巡回</h1>
-<p class="sub">今日の開催場を確認 → F2を選択 → 選択した場だけ条件検索</p>
-
-<section class="card">
-  <div class="cardtitle">① 今日の開催場</div>
-  <div id="board" class="grid"><div class="empty">「今日の開催場を取得」を押してください。</div></div>
-  <p id="selectedNote" class="selected-note">選択中 0場</p>
-  <div class="legend"><b>表示：</b> F1 / F2　・　M=モーニング　D=デイ　N=ナイター　MN=ミッドナイト</div>
-</section>
-
-<section class="card">
-  <div class="cardtitle">進行状況</div>
-  <div class="current" id="status">待機中</div>
-  <div class="detail" id="current">現在：—</div>
-  <div class="detail" id="detail"></div>
-  <div class="statusrow" style="margin-top:10px">
-    <div class="metric">確認 <b id="checked">0</b>R</div>
-    <div class="metric">星2 <b id="star">0</b>R</div>
-    <div class="metric">該当 <b id="match">0</b>R</div>
-  </div>
-</section>
-
-<section class="card">
-  <div class="cardtitle">② 該当レース</div>
-  <div id="results"><div class="empty">まだ検索していません。</div></div>
-  <div id="errors" class="errors"></div>
-</section>
-
-<div class="bottom">
-  <div class="bottominner">
-    <button id="load">今日の開催場を取得</button>
-    <button id="search" class="hide">チェックした場を検索</button>
-    <button id="stop" class="stop hide">途中停止</button>
-    <button id="back" class="secondary hide">開催場選択へ</button>
-    <button id="reset" class="secondary hide">最初から</button>
-  </div>
-</div>
-
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#07111f"><title>WINTICKET F2巡回</title>
+<style>:root{color-scheme:dark;--bg:#06101d;--panel:#0d1b2e;--panel2:#0a1626;--line:#294767;--blue:#3b82f6;--green:#6ee7a0;--red:#ff9fa8;--muted:#9db0c8;--amber:#ffd166}*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:#fff;margin:0;padding:14px 14px calc(94px + env(safe-area-inset-bottom));max-width:900px;margin-inline:auto}h1{font-size:26px;margin:5px 0 2px}.sub{color:var(--muted);font-size:14px;margin:0 0 12px}.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px;margin:12px 0}.cardtitle{font-size:18px;font-weight:900;margin-bottom:10px}.legend{font-size:13px;color:var(--muted);line-height:1.7}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.venue{display:block;background:var(--panel2);border:1px solid var(--line);border-radius:15px;padding:12px;min-height:92px;position:relative}.venue:has(input:checked){outline:2px solid var(--blue);background:#102543}.venue input{position:absolute;right:10px;top:10px;width:26px;height:26px;accent-color:var(--blue)}.venue.disabled{opacity:.55}.name{font-size:19px;font-weight:900;padding-right:30px}.tags{margin-top:10px;display:flex;gap:6px}.tag{border:1px solid #44688f;border-radius:9px;padding:5px 8px;font-weight:900;font-size:14px}.f2{color:var(--green);border-color:#387953}.f1,.g{color:var(--red);border-color:#75444d}.unknown{color:var(--amber)}.statusrow{display:flex;gap:8px;flex-wrap:wrap}.metric{background:var(--panel2);border:1px solid var(--line);padding:8px 10px;border-radius:11px;font-size:13px}.metric b{font-size:18px}.current{font-weight:900;font-size:17px;margin:10px 0 3px}.detail{color:var(--muted);font-size:13px}.group{border:1px solid var(--line);background:var(--panel2);border-radius:15px;margin:10px 0;overflow:hidden}.grouphead{padding:12px;font-size:19px;font-weight:900;border-bottom:1px solid var(--line)}.race{padding:12px;border-bottom:1px solid #203a57}.race:last-child{border-bottom:0}.racehead{display:flex;justify-content:space-between}.racename{font-size:19px;font-weight:900}.badge{display:inline-block;background:#15385e;border-radius:999px;padding:3px 8px;font-size:12px;color:#bcd8fb}.meta{font-size:13px;color:var(--muted);margin:5px 0 9px}.go{display:block;text-decoration:none;text-align:center;background:var(--blue);color:#fff;font-weight:900;border-radius:11px;padding:11px}.errors{color:#ffc1c5;font-size:13px;white-space:pre-wrap}.empty{color:var(--muted);padding:8px 0}.selected-note{font-weight:800;color:#bed8f8}.bottom{position:fixed;z-index:20;left:0;right:0;bottom:0;background:rgba(5,12,22,.97);border-top:1px solid #203650;padding:10px 10px calc(10px + env(safe-area-inset-bottom))}.bottominner{display:flex;gap:8px;width:min(900px,100%);margin:auto}.bottom button{flex:1;border:0;border-radius:13px;padding:14px 8px;color:#fff;background:var(--blue);font-weight:900;font-size:15px}.bottom .stop{background:#963d45}.bottom .secondary{background:#29415c}.hide{display:none!important}@media(max-width:420px){body{padding-inline:10px}.grid{gap:7px}.venue{padding:10px;min-height:88px}.name{font-size:17px}}</style></head><body>
+<h1>WINTICKET F2巡回</h1><p class="sub">ログイン不要の公開ページ → 今日の開催場 → F2を選択 → 選択した場だけ条件検索</p>
+<section class="card"><div class="cardtitle">① 今日の開催場</div><div id="board" class="grid"><div class="empty">「今日の開催場を取得」を押してください。</div></div><p id="selectedNote" class="selected-note">選択中 0場</p><div class="legend"><b>表示：</b> F1 / F2　・　M=モーニング　D=デイ　N=ナイター　MN=ミッドナイト<br>F1/Gは誤選択防止でチェック不可。</div></section>
+<section class="card"><div class="cardtitle">進行状況</div><div class="current" id="status">待機中</div><div class="detail" id="current">現在：—</div><div class="detail" id="detail"></div><div class="statusrow" style="margin-top:10px"><div class="metric">確認 <b id="checked">0</b>R</div><div class="metric">星2 <b id="star">0</b>R</div><div class="metric">該当 <b id="match">0</b>R</div></div></section>
+<section class="card"><div class="cardtitle">② 該当レース</div><div id="results"><div class="empty">まだ検索していません。</div></div><div id="errors" class="errors"></div></section>
+<div class="bottom"><div class="bottominner"><button id="load">今日の開催場を取得</button><button id="search" class="hide">チェックした場を検索</button><button id="stop" class="stop hide">途中停止</button><button id="back" class="secondary hide">開催場選択へ</button><button id="reset" class="secondary hide">最初から</button></div></div>
 <script>
-const $=id=>document.getElementById(id);
-const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-let boardKey="";
-let selectedSlugs=new Set();
-
-function selected(){return [...document.querySelectorAll(".venueCheck:checked")].map(x=>x.value)}
-function updateSelected(){
-  selectedSlugs=new Set(selected());
-  $("selectedNote").textContent=`選択中 ${selectedSlugs.size}場`;
-}
-
-function renderBoard(items){
-  const key=JSON.stringify(items);
-  if(key===boardKey)return;
-  boardKey=key;
-  if(!items.length){$("board").innerHTML='<div class="empty">本日の開催場を取得できませんでした。</div>';return}
-  $("board").innerHTML=items.map(v=>{
-    const grade=v.grade||"?", session=v.session||"?";
-    const gclass=grade==="F2"?"f2":grade==="F1"?"f1":"unknown";
-    const checked=selectedSlugs.has(v.slug)?"checked":"";
-    return `<label class="venue"><input class="venueCheck" type="checkbox" value="${esc(v.slug)}" ${checked}><div class="name">${esc(v.venue)}</div><div class="tags"><span class="tag ${gclass}">${esc(grade)}</span><span class="tag">${esc(session)}</span></div></label>`;
-  }).join("");
-  document.querySelectorAll(".venueCheck").forEach(el=>el.addEventListener("change",updateSelected));
-  updateSelected();
-}
-
-function renderResults(matches, phase){
-  if(!matches.length){
-    $("results").innerHTML=`<div class="empty">${phase==="done"?"現在の条件に該当するレースはありません。":"まだ該当レースはありません。"}</div>`;
-    return;
-  }
-  const grouped={};
-  for(const r of matches){(grouped[r.venue]??=[]).push(r)}
-  $("results").innerHTML=Object.entries(grouped).map(([venue,rows])=>{
-    rows.sort((a,b)=>Number(a.race)-Number(b.race));
-    const first=rows[0]||{};
-    return `<div class="group"><div class="grouphead"><span>${esc(venue)} <span class="badge">${esc(first.grade||"")} ${esc(first.session||"")}</span></span><span class="count">${rows.length}レース</span></div>${rows.map(r=>`<div class="race"><div class="racehead"><span class="racename">${esc(r.race)}R</span><span class="badge">${esc(r.star)} / ${esc(r.line)}</span></div><div class="meta">3車ライン：${esc(r.three_order)}　ライン印：${esc(r.order)}</div><a class="go" href="${esc(r.winticket_url||r.prediction_url)}" target="_blank" rel="noopener">WINTICKETで ${esc(r.race)}R を開く</a></div>`).join("")}</div>`;
-  }).join("");
-}
-
-async function post(url,body){
-  const res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):null});
-  let data={}; try{data=await res.json()}catch(e){}
-  return {ok:res.ok,...data};
-}
-
-function phaseLabel(p){return ({idle:"待機中",board:"開催場取得中",select:"開催場を選択",races:"検索中",done:"検索完了",stopped:"途中停止",error:"エラー"})[p]||p}
-
-async function update(){
-  try{
-    const s=await (await fetch("/api/status",{cache:"no-store"})).json();
-    const c=s.counters||{};
-    $("status").textContent=phaseLabel(s.phase);
-    $("current").textContent="現在："+(s.current||"—");
-    $("detail").textContent=s.detail||"";
-    $("checked").textContent=c.checked_races||0;
-    $("star").textContent=c.star2||0;
-    $("match").textContent=(s.matches||[]).length;
-    if(s.venues_info?.length)renderBoard(s.venues_info);
-    renderResults(s.matches||[],s.phase);
-    $("errors").innerHTML=(s.errors||[]).length?"<hr>"+(s.errors||[]).map(e=>`<div>${esc(e)}</div>`).join(""):"";
-
-    $("load").classList.toggle("hide",s.running||s.phase!=="idle");
-    $("search").classList.toggle("hide",s.running||s.phase!=="select");
-    $("stop").classList.toggle("hide",!s.running);
-    $("back").classList.toggle("hide",s.running||!['done','stopped','error'].includes(s.phase)||!(s.venues_info||[]).length);
-    $("reset").classList.toggle("hide",s.running||!['done','stopped','error'].includes(s.phase));
-  }catch(e){
-    $("status").textContent="通信エラー";
-  }
-}
-
-$("load").onclick=async()=>{await post("/api/load-venues");update()};
-$("search").onclick=async()=>{
-  const items=selected();
-  if(!items.length){alert("検索する開催場にチェックしてください。");return}
-  selectedSlugs=new Set(items);
-  const r=await post("/api/search-selected",{selected:items});
-  if(!r.ok&&r.reason==="no_selection")alert("開催場を選択してください。");
-  update();
-};
-$("stop").onclick=async()=>{await post("/api/stop");update()};
-$("back").onclick=()=>{window.scrollTo({top:0,behavior:"smooth"})};
-$("reset").onclick=async()=>{await post("/api/reset");selectedSlugs.clear();boardKey="";update()};
-
-update(); setInterval(update,1000);
-</script>
-</body>
-</html>
+const $=id=>document.getElementById(id),esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));let boardKey="",selectedSlugs=new Set();
+function selected(){return [...document.querySelectorAll(".venueCheck:checked")].map(x=>x.value)}function updateSelected(){selectedSlugs=new Set(selected());$("selectedNote").textContent=`選択中 ${selectedSlugs.size}場`}
+function renderBoard(items){const key=JSON.stringify(items);if(key===boardKey)return;boardKey=key;if(!items.length){$("board").innerHTML='<div class="empty">本日の開催場を取得できませんでした。</div>';return}$("board").innerHTML=items.map(v=>{const grade=v.grade||"?",session=v.session||"?",selectable=grade==="F2"||grade==="?",gclass=grade==="F2"?"f2":grade==="F1"?"f1":grade==="G"?"g":"unknown",checked=selectedSlugs.has(v.slug)&&selectable?"checked":"";return `<label class="venue ${selectable?"":"disabled"}"><input class="venueCheck" type="checkbox" value="${esc(v.slug)}" ${checked} ${selectable?"":"disabled"}><div class="name">${esc(v.venue)}</div><div class="tags"><span class="tag ${gclass}">${esc(grade)}</span><span class="tag">${esc(session)}</span></div></label>`}).join("");document.querySelectorAll(".venueCheck").forEach(el=>el.addEventListener("change",updateSelected));updateSelected()}
+function renderResults(matches,phase){if(!matches.length){$("results").innerHTML=`<div class="empty">${phase==="done"?"現在の条件に該当するレースはありません。":"まだ該当レースはありません。"}</div>`;return}const grouped={};for(const r of matches)(grouped[r.venue]??=[]).push(r);$("results").innerHTML=Object.entries(grouped).map(([venue,rows])=>`<div class="group"><div class="grouphead">${esc(venue)}</div>${rows.sort((a,b)=>a.race-b.race).map(r=>`<div class="race"><div class="racehead"><span class="racename">${esc(r.race)}R</span><span class="badge">${esc(r.star)} / ${esc(r.line)}</span></div><div class="meta">${esc(r.grade)} ${esc(r.session)}　3車ライン：${esc(r.three_order)}　ライン印：${esc(r.order)}</div><a class="go" href="${esc(r.winticket_url||r.prediction_url)}" target="_blank" rel="noopener">WINTICKETで ${esc(r.race)}R を開く</a></div>`).join("")}</div>`).join("")}
+async function post(url,body){const res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):null});let data={};try{data=await res.json()}catch(e){}return{ok:res.ok,...data}}function phaseLabel(p){return({idle:"待機中",board:"開催場取得中",select:"開催場を選択",races:"検索中",done:"検索完了",stopped:"途中停止",error:"エラー"})[p]||p}
+async function update(){try{const s=await(await fetch("/api/status",{cache:"no-store"})).json(),c=s.counters||{};$("status").textContent=phaseLabel(s.phase);$("current").textContent="現在："+(s.current||"—");$("detail").textContent=s.detail||"";$("checked").textContent=c.checked_races||0;$("star").textContent=c.star2||0;$("match").textContent=(s.matches||[]).length;if(s.venues_info?.length)renderBoard(s.venues_info);renderResults(s.matches||[],s.phase);$("errors").innerHTML=(s.errors||[]).length?"<hr>"+(s.errors||[]).map(e=>`<div>${esc(e)}</div>`).join(""):"";$("load").classList.toggle("hide",s.running||s.phase!=="idle");$("search").classList.toggle("hide",s.running||s.phase!=="select");$("stop").classList.toggle("hide",!s.running);$("back").classList.toggle("hide",s.running||!["done","stopped","error"].includes(s.phase)||!(s.venues_info||[]).length);$("reset").classList.toggle("hide",s.running||!["done","stopped","error"].includes(s.phase))}catch(e){$("status").textContent="通信エラー"}}
+$("load").onclick=async()=>{await post("/api/load-venues");update()};$("search").onclick=async()=>{const items=selected();if(!items.length){alert("検索するF2開催場にチェックしてください。");return}selectedSlugs=new Set(items);await post("/api/search-selected",{selected:items});update()};$("stop").onclick=async()=>{await post("/api/stop");update()};$("back").onclick=()=>window.scrollTo({top:0,behavior:"smooth"});$("reset").onclick=async()=>{await post("/api/reset");selectedSlugs.clear();boardKey="";update()};update();setInterval(update,1000);
+</script></body></html>
