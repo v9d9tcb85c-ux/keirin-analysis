@@ -124,6 +124,70 @@ font-size:13px;font-weight:1000;border:1px solid rgba(255,255,255,.15);box-shado
 .bib7{background:#f58213;color:#fff}.bib8{background:#ef7cab;color:#111}.bib9{background:#7b3fa0;color:#fff}
 .lineupText{margin-top:8px;font-size:12px;color:#9dafc4}
 
+
+/* ===== F2開催場 実データテーブル ===== */
+.f2BoardCard{
+  margin:18px 0 22px;border:1px solid #1d4f70;border-radius:16px;overflow:hidden;
+  background:linear-gradient(180deg,#07172a,#04101f);
+  box-shadow:inset 0 0 38px rgba(29,139,255,.04)
+}
+.f2BoardHead{
+  min-height:68px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;
+  border-bottom:1px solid #1b4968;background:linear-gradient(180deg,#092039,#071629)
+}
+.f2BoardEyebrow{display:block;color:#28dcff;font-size:10px;font-weight:1000;letter-spacing:.14em;margin-bottom:2px}
+.f2BoardHead h2{margin:0;color:#eaf5ff;font-size:22px}
+.autoSelectBadge{
+  flex:0 0 auto;border:1px solid #11644b;border-radius:999px;padding:7px 11px;
+  color:#46f0aa;background:#05261d;font-size:11px;font-weight:900
+}
+.f2BoardTable{width:100%;border-collapse:collapse;table-layout:fixed}
+.f2BoardTable thead th{
+  padding:10px 14px;text-align:left;color:#88a5c2;font-size:11px;font-weight:800;
+  background:#061323;border-bottom:1px solid #173a55
+}
+.f2BoardTable tbody td{
+  padding:11px 14px;border-bottom:1px solid #112d44;color:#eaf5ff;font-size:13px;vertical-align:middle
+}
+.f2BoardTable tbody tr:last-child td{border-bottom:0}
+.f2BoardTable tbody tr:hover{background:rgba(26,118,189,.07)}
+.f2AutoCheck{
+  width:22px;height:22px;border:2px solid #14d8f4;border-radius:5px;display:grid;place-items:center;
+  color:#39ecff;font-weight:1000;background:#042334;box-shadow:0 0 12px rgba(20,216,244,.12)
+}
+.f2VenueName{font-size:16px;font-weight:1000}
+.gradeTag{
+  display:inline-flex;min-width:50px;height:28px;align-items:center;justify-content:center;border-radius:7px;
+  border:1px solid #155291;background:#082145;color:#38aaff;font-size:14px;font-weight:1000
+}
+.sessionCell{display:flex;align-items:center;gap:8px;font-weight:900}
+.sessionIcon{font-size:20px;line-height:1}
+.sessionCode{font-size:15px}
+.sessionLong{color:#91a8c0;font-size:12px;font-weight:700}
+.session-M .sessionIcon,.session-D .sessionIcon,.session-M .sessionCode,.session-D .sessionCode{color:#ffd22f}
+.session-N .sessionIcon,.session-MN .sessionIcon,.session-N .sessionCode,.session-MN .sessionCode{color:#7286ff}
+.girlsSafe{color:#7f96ad;font-size:12px}
+.venueState{color:#31ec91;font-weight:1000}
+.f2BoardEmpty{padding:24px;text-align:center;color:#7892ad}
+.f2BoardNote{padding:8px 14px;color:#617e99;font-size:10px;border-top:1px solid #102b40;background:#04101d}
+@media(max-width:760px){
+  .f2BoardCard{border-radius:14px;margin:14px 0 18px}
+  .f2BoardHead{padding:12px}
+  .f2BoardHead h2{font-size:18px}
+  .autoSelectBadge{font-size:9px;padding:6px 8px}
+  .f2BoardTable thead{display:none}
+  .f2BoardTable,.f2BoardTable tbody{display:block}
+  .f2BoardTable tbody tr{
+    display:grid;grid-template-columns:36px 1.3fr 58px 1.6fr;
+    align-items:center;gap:6px;padding:10px 9px;border-bottom:1px solid #17354e
+  }
+  .f2BoardTable tbody td{display:block;padding:3px 4px;border:0;font-size:12px}
+  .f2BoardTable tbody td:nth-child(5),
+  .f2BoardTable tbody td:nth-child(6){grid-column:2/-1}
+  .f2VenueName{font-size:15px}
+  .sessionLong{font-size:10px}
+}
+
 </style>
 
 <style>
@@ -407,8 +471,18 @@ main{max-width:1320px!important;margin:0 auto!important;padding:20px 28px 110px!
     <div id="detail" class="progressMeta"></div>
   </section>
 
-  <div class="sectionHead"><h2>今日のF2開催</h2><span>自動選択</span></div>
-  <div id="f2Row" class="f2Row"><span class="f2pill">開催場取得待ち</span></div>
+  <section id="f2-board" class="f2BoardCard">
+    <div class="f2BoardHead">
+      <div>
+        <span class="f2BoardEyebrow">TODAY'S F2 VENUES</span>
+        <h2>本日のF2開催場一覧</h2>
+      </div>
+      <span class="autoSelectBadge">● 自動選択</span>
+    </div>
+    <div id="f2Row" class="f2BoardBody">
+      <div class="f2BoardEmpty">開催場取得待ち</div>
+    </div>
+  </section>
 
   <div id="matches" class="sectionHead"><h2>該当レース一覧</h2><span id="resultHint">未検索</span></div>
   <div id="venueNav" class="venueNav"></div>
@@ -467,10 +541,39 @@ function setSteps(s){
  if(s.phase==="done"){ [1,2,3,4].forEach(i=>$("step"+i).classList.add("done")); return; }
 }
 function renderF2(rows){
- const f2=(rows||[]).filter(v=>v.grade==="F2");
- $("f2Row").innerHTML=f2.length?f2.map(v=>`<span class="f2pill">${esc(v.venue)}<span class="g"> F2</span><span class="s">${esc(v.session||"?")}</span></span>`).join(""):'<span class="f2pill">F2開催なし</span>';
+  const f2=(rows||[]).filter(v=>v.grade==="F2");
+  if(!f2.length){
+    $("f2Row").innerHTML='<div class="f2BoardEmpty">F2開催なし</div>';
+    return;
+  }
+  const sessionMeta={
+    M:{icon:"☀",long:"モーニング"},
+    D:{icon:"☀",long:"デイ"},
+    N:{icon:"☾",long:"ナイター"},
+    MN:{icon:"◒",long:"ミッドナイト"},
+    "?":{icon:"•",long:"確認中"}
+  };
+  const body=f2.map(v=>{
+    const code=v.session||"?";
+    const sm=sessionMeta[code]||sessionMeta["?"];
+    return `<tr>
+      <td><span class="f2AutoCheck">✓</span></td>
+      <td><span class="f2VenueName">${esc(v.venue)}</span></td>
+      <td><span class="gradeTag">${esc(v.grade||"F2")}</span></td>
+      <td><span class="sessionCell session-${esc(code)}"><span class="sessionIcon">${sm.icon}</span><span class="sessionCode">${esc(code)}</span><span class="sessionLong">（${sm.long}）</span></span></td>
+      <td><span class="girlsSafe">検索時にレース単位で除外</span></td>
+      <td><span class="venueState">開催中</span></td>
+    </tr>`;
+  }).join("");
+  $("f2Row").innerHTML=`<div class="f2TableScroll">
+    <table class="f2BoardTable">
+      <thead><tr><th style="width:70px">選択</th><th>場名</th><th style="width:100px">グレード</th><th>時間帯</th><th>ガールズ</th><th style="width:100px">状況</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <div class="f2BoardNote">F2は自動選択。ガールズ判定は従来どおり各レースを開いた時点で行います。</div>
+  </div>`;
 }
-function renderMatches(rows){
+ function renderMatches(rows){
  $("matchCount").textContent=rows.length;
  if(!rows.length){
    $("venueNav").innerHTML="";
