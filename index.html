@@ -113,6 +113,17 @@ linear-gradient(135deg,#0c1729,#0a1422 55%,#0e1530);border:1px solid #253b59;bor
   .raceNo{font-size:21px}.startTime{font-size:19px}
   .venue{font-size:15px}
 }
+
+.bibRow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px}
+.bibGroup{display:flex;align-items:center;gap:5px}
+.bibSep{color:#71849d;font-weight:900;margin:0 2px}
+.bib{width:29px;height:27px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;
+font-size:13px;font-weight:1000;border:1px solid rgba(255,255,255,.15);box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.bib1{background:#f5f5f5;color:#111}.bib2{background:#242424;color:#fff}.bib3{background:#e31d26;color:#fff}
+.bib4{background:#178bd5;color:#fff}.bib5{background:#f2d20b;color:#111}.bib6{background:#20a33a;color:#fff}
+.bib7{background:#f58213;color:#fff}.bib8{background:#ef7cab;color:#111}.bib9{background:#7b3fa0;color:#fff}
+.lineupText{margin-top:8px;font-size:12px;color:#9dafc4}
+
 </style>
 
 <style>
@@ -233,6 +244,20 @@ const headers={"Content-Type":"application/json",...(CONTROL_KEY?{"X-Control-Key
 let busyAuto=false,lastState=null;
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function bibHtml(n){
+  const v=Number(n);
+  return `<span class="bib bib${v}">${esc(v)}</span>`;
+}
+function groupsHtml(groups){
+  if(!Array.isArray(groups)||!groups.length)return "";
+  return '<div class="bibRow">'+groups.map((g,i)=>
+    `${i?'<span class="bibSep">/</span>':''}<span class="bibGroup">${(g||[]).map(bibHtml).join("")}</span>`
+  ).join("")+'</div>';
+}
+function groupsText(groups){
+  if(!Array.isArray(groups)||!groups.length)return "";
+  return groups.map(g=>(g||[]).join("-")).join(" / ");
+}
 function fmt(ts){if(!ts)return "未検索";return new Date(ts*1000).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}
 function post(url,body){return fetch(url,{method:"POST",headers,body:body?JSON.stringify(body):null}).then(async r=>{let d={};try{d=await r.json()}catch(e){}return{http:r.status,...d}})}
 function phaseName(s){
@@ -281,7 +306,8 @@ function renderMatches(rows){
      <div class="midCol">
        <span class="ai">AI予想 ★2</span>
        <div class="info">ライン：<b>${esc(r.line||"")}</b><br>印：<b>${esc(r.three_order||"")}</b></div>
-       <div class="order">並び：${esc(r.order||"—")}</div>
+       ${groupsHtml(r.line_groups)}
+       <div class="lineupText">並び：${esc(groupsText(r.line_groups)||"—")}</div>
        <div class="order">${esc(r.condition_name||"")}</div>
      </div>
      <div class="betCol">
