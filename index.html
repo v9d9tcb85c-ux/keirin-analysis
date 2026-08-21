@@ -1,256 +1,301 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#071a35">
-<title>WINTICKET F2巡回ツール</title>
+<meta name="theme-color" content="#06101d">
+<title>今日の買い目</title>
 <style>
 :root{
-  color-scheme:dark;
-  --bg:#06162c;--bg2:#0a2346;--panel:#081a35;--panel2:#061326;
-  --line:#008cff;--cyan:#00d9ff;--blue:#168cff;--green:#20f06a;
-  --yellow:#ffe000;--red:#ff334d;--purple:#cf42ff;--text:#f7fbff;
-  --muted:#b9c9e6;--shadow:0 0 18px rgba(0,141,255,.22);
+  --bg:#06101d;--card:#0d1b2e;--card2:#0a1626;--line:#263e5e;
+  --text:#f7fbff;--muted:#91a8c4;--blue:#387df6;--cyan:#66a7ff;
+  --gold:#ffd65a;--green:#63e59a;--red:#ff737d;--orange:#ffb65f;
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif
 }
 *{box-sizing:border-box}
-html{background:var(--bg)}
-body{
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;
-  background:
-    radial-gradient(circle at 8% 0%,rgba(20,115,255,.28),transparent 28%),
-    radial-gradient(circle at 92% 12%,rgba(0,210,255,.16),transparent 24%),
-    linear-gradient(180deg,#0a2852 0,#071a35 22%,#041125 100%);
-  color:var(--text);margin:0;padding:12px 12px 112px;min-height:100vh;
-}
-.shell{width:min(920px,100%);margin:auto}
-.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:10px;margin-bottom:10px}
-.brand,.quick{border-radius:20px;background:linear-gradient(145deg,rgba(7,29,63,.96),rgba(2,13,31,.96));box-shadow:var(--shadow)}
-.brand{border:1px solid #279bff;padding:14px 16px 12px;position:relative;overflow:hidden}
-.brand:after{content:"";position:absolute;right:-40px;top:-45px;width:180px;height:180px;background:linear-gradient(135deg,transparent 30%,rgba(0,152,255,.20) 31% 40%,transparent 41% 55%,rgba(255,224,0,.15) 56% 63%,transparent 64%);transform:rotate(-8deg);pointer-events:none}
-.wt{font-size:28px;line-height:1;font-weight:1000;letter-spacing:.8px;text-shadow:0 0 18px rgba(255,255,255,.18)}
-.f2hero{font-size:35px;line-height:1.05;font-weight:1000;margin-top:4px}.f2hero b{color:var(--yellow);font-size:42px;text-shadow:0 0 16px rgba(255,224,0,.28)}
-.heroSub{font-size:13px;font-weight:800;margin-top:8px;color:#fff}
-.marks{display:flex;gap:16px;align-items:center;margin-top:8px;font-weight:1000;font-size:25px}
-.marks .m1{color:var(--yellow)}.marks .m2{color:var(--green)}.marks .m3{color:var(--cyan)}.marks .m4{color:var(--red)}
-.legendTop{font-size:11px;color:var(--muted);margin-top:5px}.legendTop b:nth-of-type(1){color:var(--yellow)}.legendTop b:nth-of-type(2){color:var(--purple)}.legendTop b:nth-of-type(3){color:#dce8ff}.legendTop b:nth-of-type(4){color:var(--cyan)}
-.quick{display:grid;grid-template-rows:1fr 1fr;gap:8px;background:transparent;box-shadow:none}
-.quickbox{background:linear-gradient(145deg,#081a35,#031023);border-radius:16px;padding:11px 13px;box-shadow:var(--shadow)}
-.connection{border:1px solid #b4e600}.clockbox{border:1px solid var(--cyan);display:flex;justify-content:space-between;align-items:center}
-.online{color:var(--green);font-size:17px;font-weight:1000}.offline{color:#ff7f91;font-size:17px;font-weight:1000}
-.pcSub{font-size:11px;color:#dce8ff;margin-top:4px}.clockLabel{font-size:13px;font-weight:900}.clock{font-size:34px;font-weight:1000;color:var(--yellow);line-height:1;margin-top:4px;text-shadow:0 0 16px rgba(255,224,0,.3)}.bike{font-size:42px;filter:drop-shadow(0 0 8px rgba(0,170,255,.55))}
-.card{background:linear-gradient(145deg,rgba(6,25,52,.98),rgba(2,13,28,.98));border:1px solid var(--line);border-radius:18px;padding:12px;margin:10px 0;box-shadow:var(--shadow)}
-.titleRow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}.title{font-size:19px;font-weight:1000;display:flex;align-items:center;gap:8px}.num{width:34px;height:34px;border-radius:50%;display:inline-grid;place-items:center;color:#fff;border:2px solid var(--cyan);background:#07315f;box-shadow:0 0 13px rgba(0,185,255,.6);font-size:15px}.selTop{font-size:13px;color:var(--cyan);font-weight:900}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.venue{display:block;background:linear-gradient(145deg,#071a35,#041125);border:1px solid #31658d;border-radius:14px;padding:10px;min-height:84px;position:relative;transition:.16s}.venue:has(input:checked){border-color:#00a8ff;box-shadow:inset 0 0 0 1px #087dff,0 0 12px rgba(0,142,255,.30);background:linear-gradient(145deg,#0d2e5b,#071a35)}.venue input{position:absolute;right:10px;top:10px;width:25px;height:25px;accent-color:#1498ff}.venue.disabled{opacity:.52}.name{font-size:18px;font-weight:1000;padding-right:34px}.tags{margin-top:9px;display:flex;gap:6px;align-items:center}.tag{border:1px solid #547493;border-radius:8px;padding:4px 8px;font-weight:1000;font-size:13px;background:#07101f}.f2{color:#43ff75;border-color:#10b84b}.f1{color:#ff596d;border-color:#b9283b}.unknown{color:var(--yellow)}.session-M{color:var(--yellow);border-color:#9c8c00}.session-D{color:#ef62ff;border-color:#77298d}.session-N{color:#d4e3ff;border-color:#547493}.session-MN{color:var(--cyan);border-color:#167fa4}
-.detail{color:var(--muted);font-size:12px;line-height:1.45;margin-top:5px}.current{font-size:20px;font-weight:1000;color:var(--green);text-shadow:0 0 12px rgba(32,240,106,.25)}
-.track{height:11px;background:#02101f;border:1px solid #25537e;border-radius:999px;overflow:hidden;margin-top:11px;box-shadow:inset 0 0 8px rgba(0,0,0,.6)}.fill{height:100%;width:0;background:linear-gradient(90deg,#008dff,#00e5ff);box-shadow:0 0 12px rgba(0,220,255,.7);transition:width .4s}
-.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.metric{background:#061326;border:1px solid #246fa8;border-radius:12px;padding:8px 6px;text-align:center;font-size:12px;font-weight:900}.metric b{display:block;font-size:28px;line-height:1.05;margin-top:2px}.metric:nth-child(1) b{color:#159dff}.metric:nth-child(2){border-color:#a58d00}.metric:nth-child(2) b{color:var(--yellow)}.metric:nth-child(3){border-color:#a92639}.metric:nth-child(3) b{color:var(--red)}
-.result{display:grid;grid-template-columns:110px 1fr;gap:10px;background:linear-gradient(145deg,#071a35,#041125);border:1px solid #168fff;border-radius:13px;padding:10px;margin:8px 0}.raceBig{border-right:1px solid #1476bf;display:flex;flex-direction:column;justify-content:center;text-align:center}.raceVenue{font-size:14px;font-weight:900}.raceNo{font-size:31px;font-weight:1000;color:var(--yellow);line-height:1}.resultMeta{font-size:15px;font-weight:900;min-height:26px}.go{display:block;text-align:center;text-decoration:none;background:linear-gradient(180deg,#0f66e6,#0648bb);border:1px solid #1aa4ff;color:#fff;border-radius:9px;padding:8px;font-weight:1000;margin-top:6px;box-shadow:inset 0 0 14px rgba(0,165,255,.20)}.empty{color:var(--muted);padding:6px}.error{color:#ffc0c5;font-size:12px}
-.bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(1,9,20,.96);border-top:1px solid #17395b;padding:8px 10px calc(8px + env(safe-area-inset-bottom));z-index:20}.bottomin{display:flex;gap:8px;width:min(920px,100%);margin:auto}.bottom button{flex:1;border-radius:12px;padding:13px 8px;color:#fff;font-weight:1000;font-size:15px;border:1px solid #13a0ff;background:linear-gradient(180deg,#168cff,#0860d9);box-shadow:0 0 14px rgba(0,145,255,.25)}.bottom .stop{background:linear-gradient(180deg,#c9273d,#7d1525);border-color:#ff4a62}.bottom .secondary{background:linear-gradient(180deg,#42121a,#16070b);border-color:#ff334d;color:#fff;box-shadow:0 0 14px rgba(255,30,60,.28)}.hide{display:none!important}
-@media(max-width:620px){body{padding-inline:8px}.hero{grid-template-columns:1.08fr .92fr;gap:7px}.brand{padding:11px 12px}.wt{font-size:21px}.f2hero{font-size:25px}.f2hero b{font-size:31px}.heroSub{font-size:11px}.marks{font-size:20px;gap:11px}.quickbox{padding:9px}.online,.offline{font-size:14px}.clock{font-size:27px}.bike{font-size:31px}.card{padding:10px}.grid{gap:7px}.venue{padding:9px;min-height:80px}.name{font-size:16px}.tag{font-size:12px;padding:4px 6px}.result{grid-template-columns:76px 1fr}.raceNo{font-size:27px}.title{font-size:17px}.num{width:30px;height:30px}}
-@media(max-width:390px){.hero{grid-template-columns:1fr}.quick{grid-template-columns:1fr 1fr;grid-template-rows:auto}.clockbox{min-height:74px}.bike{display:none}.legendTop{display:none}}
+body{margin:0;background:linear-gradient(180deg,#06101d 0%,#081727 100%);color:var(--text)}
+main{max-width:760px;margin:auto;padding:env(safe-area-inset-top) 15px calc(125px + env(safe-area-inset-bottom))}
+.top{padding:22px 3px 10px}
+.eyebrow{font-size:11px;color:#78a9e8;font-weight:900;letter-spacing:.08em}
+h1{font-size:32px;margin:6px 0 5px}
+.subtitle{font-size:13px;color:var(--muted);line-height:1.55}
+.hero{background:linear-gradient(135deg,#18477d,#142942);border:1px solid #326795;border-radius:25px;padding:19px;margin:10px 0 13px;box-shadow:0 14px 40px #0003}
+.heroRow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.bigCount{font-size:64px;font-weight:950;line-height:.9}
+.bigCount small{font-size:17px;color:#c9d8eb;margin-left:5px}
+.heroLabel{font-size:12px;font-weight:900;color:#c5d7ed;margin-bottom:7px}
+.updated{text-align:right;color:#a8bdd7;font-size:11px}
+.updated b{font-size:15px;color:white}
+.conditions{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+.chip{border:1px solid #3b5d86;background:#0b1a2e;border-radius:999px;padding:7px 10px;font-weight:900;font-size:12px}
+.chip.star{color:#ffe47b;background:#2d260d;border-color:#8e7421}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:12px 0}
+.stat{background:#0d1b2d;border:1px solid #233d5b;border-radius:15px;padding:10px;text-align:center}
+.stat b{display:block;font-size:22px}
+.stat span{font-size:10px;color:var(--muted)}
+.flow{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:15px;margin:13px 0}
+.flowTitle{font-size:15px;font-weight:950;margin-bottom:11px}
+.steps{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
+.step{background:var(--card2);border:1px solid #203954;border-radius:13px;padding:10px}
+.step b{display:block;font-size:23px}
+.step span{font-size:10px;color:var(--muted)}
+.statusCard{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:15px;margin:14px 0}
+.statusTop{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.statusTop b{font-size:18px}
+.statusText{font-weight:900;color:#d7e5f5}
+.detail{margin-top:7px;color:#8fb6e8;font-size:12px;line-height:1.5}
+.current{margin-top:11px;display:flex;justify-content:space-between;color:var(--muted);font-size:12px}
+.bar{height:9px;background:#07101d;border-radius:999px;overflow:hidden;margin-top:10px}
+.fill{height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--cyan));transition:width .3s}
+.sectionTitle{display:flex;align-items:center;justify-content:space-between;margin:20px 2px 9px}
+.sectionTitle h2{margin:0;font-size:21px}
+.hint{font-size:11px;color:var(--muted)}
+.venueNav{display:flex;gap:7px;overflow-x:auto;padding:2px 0 7px;-webkit-overflow-scrolling:touch}
+.venueBtn{white-space:nowrap;border:1px solid #365a84;background:#10223a;color:white;border-radius:999px;padding:9px 12px;font-size:13px;font-weight:900;text-decoration:none}
+.venueBtn b{color:#7fb5ff;margin-left:4px}
+.race{background:linear-gradient(180deg,#11223a,#0e1a2c);border:1px solid #315172;border-radius:21px;padding:15px;margin:10px 0;box-shadow:0 10px 30px #0002}
+.raceTop{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.venue{font-size:23px;font-weight:950}
+.raceNo{font-size:13px;color:#abc5e6;font-weight:900;margin-top:2px}
+.time{font-size:29px;font-weight:950}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.tag{background:#0a1627;border:1px solid #2d486b;border-radius:10px;padding:7px 9px;font-size:12px;font-weight:900}
+.tag.hit{color:#79efaa;background:#0d3023;border-color:#287a55}
+.tag.star{color:#ffe378;background:#2c250d;border-color:#8c7420}
+.order{margin-top:10px;background:#091526;border-radius:13px;padding:11px;color:#d6e2f0;font-size:13px;line-height:1.5}
+.open{display:block;margin-top:10px;text-decoration:none;background:#203b61;color:#fff;border-radius:12px;padding:12px;text-align:center;font-size:13px;font-weight:900}
+.empty{background:var(--card);border:1px dashed #35506f;border-radius:20px;padding:30px 15px;text-align:center;color:var(--muted)}
+.empty b{display:block;color:white;font-size:18px;margin-bottom:6px}
+.errorBox{margin-top:10px}
+.error{background:#35171c;color:#ffc5ca;border-radius:12px;padding:10px;font-size:12px;margin:6px 0}
+.bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(5,12,22,.96);backdrop-filter:blur(18px);border-top:1px solid #263b56;padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:30}
+.bottomIn{max-width:760px;margin:auto;display:flex;gap:8px}
+button{border:0;border-radius:15px;padding:15px 12px;font-size:16px;font-weight:950;color:white}
+.primary{background:var(--blue);flex:1}
+.stop{background:#9a3a41;flex:1}
+.finish{background:#25415f;flex:1}
+button:disabled{opacity:.45}
+.hidden{display:none!important}
 
-.bottom #retry{background:linear-gradient(180deg,#168cff,#0860d9);border-color:#13a0ff;color:#fff}
-.bottom #reset{background:linear-gradient(180deg,#26384d,#101b2a);border-color:#617a95;color:#fff;box-shadow:none}
-.bottom #hardReset{background:linear-gradient(180deg,#4b1f2a,#2a1016);border-color:#8d3a4a;color:#ffd8df}
-
-.actionMsg{margin:0 0 10px;padding:10px 14px;border-radius:12px;border:1px solid #174b79;background:#061a31;color:#9fcfff;font-size:13px;font-weight:800;min-height:18px}
-.actionMsg.ok{border-color:#00a86b;color:#6dffc1;background:#06251f}
-.actionMsg.wait{border-color:#1a91ff;color:#7dd5ff;background:#06223e}
-.actionMsg.err{border-color:#e0445e;color:#ff9dad;background:#2b0d17}
+.autoF2{display:flex;gap:7px;overflow-x:auto;padding:2px 0 7px;-webkit-overflow-scrolling:touch}
+.autoF2Item{white-space:nowrap;border:1px solid #365a84;background:#10223a;color:white;border-radius:999px;padding:9px 12px;font-size:13px;font-weight:900}
+.autoF2Item .grade{color:#63e59a;margin-left:5px}
+.autoF2Item .session{color:#ffd65a;margin-left:5px}
+.betBox{margin-top:10px;background:#0b2032;border:1px solid #315172;border-radius:13px;padding:11px}
+.betLabel{font-size:11px;color:#91a8c4;font-weight:900}
+.betText{font-size:18px;font-weight:950;color:#fff;margin-top:3px}
+.conditionText{font-size:11px;color:#9eb6d3;margin-top:5px;line-height:1.45}
+.sessionTag{color:#7fb5ff}
 </style>
 </head>
 <body>
-<div class="shell">
-  <div id="actionMsg" class="actionMsg">操作待機中</div>
-  <header class="hero">
-    <div class="brand">
-      <div class="wt">WINTICKET</div>
-      <div class="f2hero"><b>F2</b> 巡回ツール</div>
-      <div class="heroSub">今日の開催場を取得 → 対象レースを自動検索</div>
-      <div class="marks"><span class="m1">◎</span><span class="m2">○</span><span class="m3">△</span><span class="m4">×</span></div>
-      <div class="legendTop"><b>M</b>=モーニング / <b>D</b>=デイ / <b>N</b>=ナイター / <b>MN</b>=ミッドナイト</div>
-    </div>
-    <div class="quick">
-      <div class="quickbox connection">
-        <div id="pc" class="offline">● PC未接続</div>
-        <div id="pcDetail" class="pcSub">PC側の agent を起動してください。</div>
+<main>
+  <div class="top">
+    <div class="eyebrow">WINTICKET SMART FINDER ・ COMPLETE AUTO v8.2</div>
+    <h1>今日の買い目</h1>
+    <div class="subtitle">今日の開催場を取得し、F2だけを自動選択。AI予想 星2 → ライン → 印条件を判定し、買えるレースだけ表示します。</div>
+  </div>
+
+  <section class="hero">
+    <div class="heroRow">
+      <div>
+        <div class="heroLabel">本日の該当</div>
+        <div id="matchCount" class="bigCount">0<small>件</small></div>
       </div>
-      <div class="quickbox clockbox"><div><div class="clockLabel">◷ 現在時刻</div><div id="clock" class="clock">--:--</div></div><div class="bike">🚴</div></div>
+      <div class="updated">最終検索<br><b id="updated">未検索</b></div>
     </div>
-  </header>
-
-  <section class="card">
-    <div class="titleRow"><div class="title"><span class="num">01</span>今日の開催場</div><div id="selectedTop" class="selTop">選択中 0場</div></div>
-    <div id="board" class="grid"><div class="empty">PC接続後に「今日の開催場を取得」を押してください。</div></div>
-    <div id="selected" class="detail">選択中 0場</div>
-    <div class="detail">F2だけチェックできます。 M=モーニング / D=デイ / N=ナイター / MN=ミッドナイト</div>
-  </section>
-
-  <section class="card">
-    <div class="titleRow"><div class="title"><span class="num">02</span>進行状況</div></div>
-    <div id="status" class="current">待機中</div>
-    <div id="current" class="detail">現在：—</div>
-    <div id="detail" class="detail"></div>
-    <div class="track"><div id="fill" class="fill"></div></div>
-    <div class="metrics">
-      <div class="metric">確認<b><span id="checked">0</span>R</b></div>
-      <div class="metric">星2<b><span id="star">0</span>R</b></div>
-      <div class="metric">該当<b><span id="match">0</span>R</b></div>
+    <div class="conditions">
+      <span class="chip">F2 自動選択</span>
+      <span class="chip star">AI予想 ★★☆ 星2</span>
+      <span class="chip">3.2.2</span><span class="chip">2.3.2</span><span class="chip">2.2.3</span>
+      <span class="chip">4.3</span>
+      <span class="chip">◎○△ / ◎○×</span>
     </div>
   </section>
 
-  <section class="card">
-    <div class="titleRow"><div class="title"><span class="num">03</span>該当レース</div></div>
-    <div id="results"><div class="empty">まだ検索していません。</div></div>
-    <div id="errors" class="error"></div>
+  <div class="summary">
+    <div class="stat"><b id="venueStat">0</b><span>今日の開催場</span></div>
+    <div class="stat"><b id="f2VenueStat">0</b><span>自動選択F2場</span></div>
+    <div class="stat"><b id="matchStat">0</b><span>該当レース</span></div>
+  </div>
+
+  <section class="flow">
+    <div class="flowTitle">今日のF2開催</div>
+    <div id="autoF2" class="autoF2"><span class="hint">開催場取得待ち</span></div>
   </section>
+
+  <section class="flow">
+    <div class="flowTitle">絞り込み状況</div>
+    <div class="steps">
+      <div class="step"><b id="checkedStat">0</b><span>確認レース</span></div>
+      <div class="step"><b id="starStat">0</b><span>星2</span></div>
+      <div class="step"><b id="lineStat">0</b><span>指定ライン</span></div>
+      <div class="step"><b id="orderStat">0</b><span>印条件</span></div>
+    </div>
+  </section>
+
+  <section class="statusCard">
+    <div class="statusTop"><b>検索状況</b><span id="status" class="statusText">待機中</span></div>
+    <div id="detail" class="detail">PC接続後、「今日を検索」でF2を自動検索します。</div>
+    <div class="current"><span>現在</span><span id="current">—</span></div>
+    <div class="bar"><div id="fill" class="fill"></div></div>
+    <div id="errorBox" class="errorBox"></div>
+  </section>
+
+  <div id="venueNavSection" class="hidden">
+    <div class="sectionTitle"><h2>場ごとに移動</h2><span class="hint">該当件数</span></div>
+    <div id="venueNav" class="venueNav"></div>
+  </div>
+
+  <div class="sectionTitle"><h2>本日の買えるレース</h2><span id="resultHint" class="hint">未検索</span></div>
+  <section id="results"><div class="empty"><b>検索前です</b>下の「今日を検索」を押してください。</div></section>
+</main>
+
+<div class="bottom">
+  <div class="bottomIn">
+    <button id="startBtn" class="primary">今日を検索</button>
+    <button id="stopBtn" class="stop hidden">途中停止</button>
+    <button id="retryBtn" class="finish hidden">再検索</button>
+  </div>
 </div>
 
-<div class="bottom"><div class="bottomin">
-  <button id="load">今日の開催場を取得</button>
-  <button id="search" class="hide">チェックした場を検索</button>
-  <button id="stop" class="stop hide">途中停止</button>
-  <button id="retry" class="hide">再検索</button>
-  <button id="reset" class="secondary hide">終了</button>
-  <button id="hardReset" class="secondary">完全リセット</button>
-</div></div>
-
 <script>
-const $=id=>document.getElementById(id),esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-let boardKey="",selectedSlugs=new Set(),lastState=null;
-function showAction(text,type="wait"){
-  const el=$("actionMsg");if(!el)return;
-  el.textContent=text;el.className="actionMsg "+type;
-}
+const $=id=>document.getElementById(id);
 const CONTROL_KEY=localStorage.getItem("wt_control_key")||"";
 const headers={"Content-Type":"application/json",...(CONTROL_KEY?{"X-Control-Key":CONTROL_KEY}:{})};
+let lastState=null;
+let autoStarted=false;
 
-function tickClock(){const d=new Date();$("clock").textContent=d.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",hour12:false})}
-function selected(){return [...document.querySelectorAll(".venueCheck:checked")].map(x=>x.value)}
-function updateSelected(){selectedSlugs=new Set(selected());const t=`選択中 ${selectedSlugs.size}場`;$("selected").textContent=t;$("selectedTop").textContent=t}
-function renderBoard(items){
-  const key=JSON.stringify(items);if(key===boardKey)return;boardKey=key;
-  if(!items.length){$("board").innerHTML='<div class="empty">開催場をまだ取得していません。</div>';return}
-  $("board").innerHTML=items.map(v=>{
-    const grade=v.grade||"?",selectable=grade==="F2",cls=grade==="F2"?"f2":grade==="F1"?"f1":"unknown";
-    const checked=selectedSlugs.has(v.slug)&&selectable?"checked":"";
-    const ses=v.session||"?",sesCls=`session-${ses.replace(/[^A-Z]/g,"")}`;
-    return `<label class="venue ${selectable?"":"disabled"}"><input class="venueCheck" type="checkbox" value="${esc(v.slug)}" ${checked} ${selectable?"":"disabled"}><div class="name">${esc(v.venue)}</div><div class="tags"><span class="tag ${cls}">${esc(grade)}</span><span class="tag ${sesCls}">${esc(ses)}</span></div></label>`
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]||m))}
+function fmt(ts){
+  if(!ts)return "未検索";
+  return new Date(ts*1000).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
+}
+function phaseName(p,running){
+  if(!running){
+    if(p==="done")return "検索完了";
+    if(p==="stopped")return "途中停止";
+    if(p==="error")return "エラー";
+    if(p==="select")return "F2取得完了";
+    return "待機中";
+  }
+  return ({queued:"PC応答待ち",board:"開催場取得中",races:"F2自動検索中",stopping:"停止処理中"})[p]||"検索中";
+}
+function post(url,body){
+  return fetch(url,{method:"POST",headers,body:body?JSON.stringify(body):null})
+    .then(async r=>{let d={};try{d=await r.json()}catch(e){}return{http:r.status,...d}});
+}
+function pct(s,c){
+  if(s.phase==="done"||s.phase==="select")return 100;
+  const total=Number(c.selected_venues||c.board_total||0);
+  const done=Number(c.venue_index||c.board_done||0);
+  if(total>0)return Math.max(3,Math.min(99,Math.round(done/total*100)));
+  return s.running?12:0;
+}
+function renderF2(items){
+  const f2=(items||[]).filter(v=>v.grade==="F2");
+  $("venueStat").textContent=(items||[]).length;
+  $("f2VenueStat").textContent=f2.length;
+  $("autoF2").innerHTML=f2.length
+    ? f2.map(v=>`<span class="autoF2Item">${esc(v.venue)}<span class="grade">F2</span><span class="session">${esc(v.session||"?")}</span></span>`).join("")
+    : '<span class="hint">F2開催を取得待ち</span>';
+}
+function renderMatches(rows){
+  const area=$("results");
+  $("matchCount").innerHTML=`${rows.length}<small>件</small>`;
+  $("matchStat").textContent=rows.length;
+  if(!rows.length){
+    area.innerHTML='<div class="empty"><b>現在の該当レースなし</b>条件に合うレースはありません。</div>';
+    $("venueNavSection").classList.add("hidden");
+    return;
+  }
+  const counts={};
+  rows.forEach(r=>counts[r.venue]=(counts[r.venue]||0)+1);
+  $("venueNav").innerHTML=Object.entries(counts).map(([v,n])=>`<a class="venueBtn" href="#venue-${encodeURIComponent(v)}">${esc(v)}<b>${n}件</b></a>`).join("");
+  $("venueNavSection").classList.remove("hidden");
+
+  const seen={};
+  area.innerHTML=rows.map(r=>{
+    const anchor=!seen[r.venue]?(seen[r.venue]=true,` id="venue-${encodeURIComponent(r.venue)}"`):"";
+    const target=r.event_url||r.winticket_url||r.prediction_url||"#";
+    return `<article class="race"${anchor}>
+      <div class="raceTop">
+        <div><div class="venue">${esc(r.venue)}</div><div class="raceNo">${esc(r.race)}R</div></div>
+        <div class="time">${esc(r.session||"")}</div>
+      </div>
+      <div class="tags">
+        <span class="tag sessionTag">${esc(r.grade||"F2")}</span>
+        <span class="tag star">${esc(r.star||"星2")}</span>
+        <span class="tag">${esc(r.line||"")}</span>
+        <span class="tag hit">${esc(r.three_order||"")}</span>
+      </div>
+      <div class="order"><b>並び・印</b><br>${esc(r.order||"—")}</div>
+      <div class="betBox">
+        <div class="betLabel">買い目</div>
+        <div class="betText">${esc(r.bet||"判定条件")}</div>
+        <div class="conditionText">${esc(r.condition_name||"")}</div>
+      </div>
+      <a class="open" href="${esc(target)}" target="_blank" rel="noopener">WINTICKET 投票ページを開く</a>
+    </article>`;
   }).join("");
-  document.querySelectorAll(".venueCheck").forEach(e=>e.onchange=updateSelected);updateSelected();
 }
-function renderResults(rows){
-  $("results").innerHTML=rows.length?rows.map(r=>`<div class="result"><div class="raceBig"><div class="raceVenue">${esc(r.venue)}</div><div class="raceNo">${esc(r.race)}R</div></div><div><div class="resultMeta">${esc(r.star||"")} / ${esc(r.line||"")} / ${esc(r.three_order||"")}</div><a class="go" target="_blank" rel="noopener" href="${esc(r.winticket_url||r.prediction_url||"#")}">WINTICKETで見る　›</a></div></div>`).join(""):'<div class="empty">現在の該当レースなし</div>';
-}
-function pct(s,c){if(s.phase==="select"||s.phase==="done")return 100;const total=Number(c.selected_venues||c.board_total||0),done=Number(c.venue_index||c.board_done||0);if(total>0)return Math.max(3,Math.min(99,Math.round(done/total*100)));return s.running?12:0}
-async function post(url,body){const r=await fetch(url,{method:"POST",headers,body:body?JSON.stringify(body):null});let d={};try{d=await r.json()}catch(e){}return{http:r.status,...d}}
 async function update(){
   try{
-    const s=await(await fetch("/api/status",{cache:"no-store"})).json(),c=s.counters||{};lastState=s;
-    $("pc").textContent=s.agent_online?"● PC接続中":"● PC未接続";$("pc").className=s.agent_online?"online":"offline";
-    $("pcDetail").textContent=s.agent_online?"取得処理はPC側で実行されます。":"PC側の agent を起動してください。";
-    $("status").textContent=({idle:"待機中",queued:"PC応答待ち",board:"開催場取得中",select:"開催場を選択",races:"検索中",done:"検索完了",stopped:"途中停止",stopping:"停止処理中",error:"エラー"})[s.phase]||s.phase;
-    $("current").textContent="現在："+(s.current||"—");$("detail").textContent=s.detail||"";
-    $("checked").textContent=c.checked_races||0;$("star").textContent=c.star2||0;$("match").textContent=(s.matches||[]).length;
+    const r=await fetch("/api/status",{cache:"no-store"});
+    const s=await r.json();
+    lastState=s;
+    const c=s.counters||{}, matches=s.matches||[], errors=s.errors||[];
+    renderF2(s.venues_info||[]);
+    renderMatches(matches);
+    $("updated").textContent=fmt(s.updated_at||s.finished_at||0);
+    $("status").textContent=phaseName(s.phase,s.running);
+    $("detail").textContent=s.detail||"";
+    $("current").textContent=s.current||"—";
     $("fill").style.width=pct(s,c)+"%";
-    renderBoard(s.venues_info||[]);renderResults(s.matches||[]);
-    $("errors").innerHTML=(s.errors||[]).map(e=>`<div>${esc(e)}</div>`).join("");
-    $("load").classList.toggle("hide",s.running||s.phase!=="idle"||!s.agent_online);
-    $("search").classList.toggle("hide",s.running||!["select","stopped","done"].includes(s.phase)||!s.agent_online);
-    $("stop").classList.toggle("hide",!s.running);$("stop").disabled=!!s.stop_requested||s.phase==="stopping";
-$("hardReset").disabled=s.running;
-    const retryReady=!s.running&&["stopped","done"].includes(s.phase)&&selectedSlugs.size>0&&s.agent_online;
-    $("retry").classList.toggle("hide",!retryReady);
-    $("retry").disabled=!retryReady;
-    $("reset").classList.toggle("hide",s.running||!["done","stopped","error"].includes(s.phase));
-  }catch(e){$("pc").textContent="● Render通信エラー";$("pc").className="offline"}
-}
-$("load").onclick=async()=>{
-  const b=$("load");b.disabled=true;b.textContent="送信中…";showAction("開催場取得を送信中…","wait");
-  try{
-    const d=await post("/api/control/load-board",{});
-    if(!d.ok){showAction("受付エラー："+(d.reason||d.http),"err");alert(d.reason||"開始できません");return;}
-    showAction("受付OK：PCへ開催場取得命令を渡しました","ok");await update();
-  }catch(e){showAction("通信エラー：開催場取得を送れません","err");}
-  finally{b.disabled=false;b.textContent="今日の開催場を取得";}
-};
-
-$("search").onclick=async()=>{
-  const a=selected();
-  if(!a.length){showAction("F2開催場をチェックしてください","err");return alert("F2開催場をチェックしてください");}
-  const b=$("search");b.disabled=true;b.textContent="送信中…";showAction("検索を送信中…","wait");
-  try{
-    const d=await post("/api/control/search",{selected:a});
-    if(!d.ok){showAction("受付エラー："+(d.reason||d.http),"err");alert(d.reason||"検索開始できません");return;}
-    showAction("受付OK：PCへ検索命令を渡しました","ok");await update();
-  }catch(e){showAction("通信エラー：検索命令を送れません","err");}
-  finally{b.disabled=false;b.textContent="チェックした場を検索";}
-};
-
-$("retry").onclick=async()=>{
-  const a=selected();
-  if(!a.length){showAction("F2開催場をチェックしてください","err");return alert("F2開催場をチェックしてください");}
-
-  const b=$("retry");
-  b.disabled=true;
-  b.textContent="再検索送信中…";
-  showAction("前回結果を残したまま再検索を開始します…","wait");
-
-  try{
-    const d=await post("/api/control/search",{selected:a,preserve_display:true});
-    if(!d.ok){
-      showAction("再検索を受付できません："+(d.reason||d.http),"err");
-      alert(d.reason||"再検索を開始できません");
-      return;
-    }
-    showAction("再検索受付OK：新しい1R目を確認するまで前回結果を保持します","ok");
-    await update();
+    $("checkedStat").textContent=c.checked_races||0;
+    $("starStat").textContent=c.star2||0;
+    $("lineStat").textContent=c.line_target||0;
+    $("orderStat").textContent=c.order_target||0;
+    $("resultHint").textContent=s.phase==="done"?`${matches.length}件`:(s.running?"検索中":"未検索");
+    $("errorBox").innerHTML=errors.map(e=>`<div class="error">${esc(e)}</div>`).join("");
+    $("startBtn").disabled=!!s.running||!s.agent_online;
+    $("stopBtn").classList.toggle("hidden",!s.running);
+    $("retryBtn").classList.toggle("hidden",s.running||!s.agent_online||!["done","stopped"].includes(s.phase));
   }catch(e){
-    showAction("通信エラー：再検索命令を送れません","err");
-  }finally{
-    b.disabled=false;
-    b.textContent="再検索";
+    $("status").textContent="Render通信エラー";
   }
-};
-
-$("stop").onclick=async()=>{
-  const b=$("stop");b.disabled=true;b.textContent="停止処理中…";showAction("途中停止を受付中…","wait");
+}
+async function startAll(){
+  if(autoStarted)return;
+  autoStarted=true;
   try{
-    const d=await post("/api/control/stop",{});
-    if(!d.ok){showAction("受付エラー："+(d.reason||d.http),"err");return;}
-    showAction("途中停止を受付しました","ok");await update();
-  }catch(e){showAction("通信エラー：途中停止を送れません","err");}
+    let d=await post("/api/control/load-board",{});
+    if(!d.ok){alert("開催場取得を開始できません: "+(d.reason||d.http));return}
+    // 開催場取得完了を待ち、F2自動検索へ進む。
+    const deadline=Date.now()+180000;
+    while(Date.now()<deadline){
+      await new Promise(r=>setTimeout(r,1500));
+      const st=await (await fetch("/api/status",{cache:"no-store"})).json();
+      if(!st.running && (st.venues_info||[]).length){
+        d=await post("/api/control/auto-search",{});
+        if(!d.ok)alert("F2自動検索を開始できません: "+(d.reason||d.http));
+        return;
+      }
+      if(st.phase==="error"){alert("開催場取得でエラーが発生しました");return}
+    }
+    alert("開催場取得の待機がタイムアウトしました");
+  }finally{
+    autoStarted=false;
+  }
+}
+$("startBtn").onclick=startAll;
+$("retryBtn").onclick=async()=>{
+  const d=await post("/api/control/auto-search",{});
+  if(!d.ok)alert("再検索できません: "+(d.reason||d.http));
 };
-
-$("reset").onclick=async()=>{
-  const b=$("reset");if(b.disabled)return;b.disabled=true;b.textContent="終了処理中…";showAction("終了処理中…","wait");
-  try{
-    const d=await post("/api/control/reset",{});
-    if(!d.ok){showAction("終了できません："+(d.reason||d.http),"err");return;}
-    renderResults([]);$("checked").textContent="0";$("star").textContent="0";$("match").textContent="0";$("fill").style.width="0%";
-    showAction("終了しました。検索結果をリセットしました（F2チェックは保持）","ok");
-    await update();
-  }catch(e){showAction("終了処理で通信エラー","err");}
-  finally{b.disabled=false;b.textContent="終了";}
-};
-
-$("hardReset").onclick=async()=>{
-  if(lastState&&lastState.running){showAction("検索中は完全リセットできません","err");return alert("検索中です。先に「途中停止」を押してください。");}
-  if(!confirm("完全リセットします。開催場一覧・チェック・検索結果・進捗を全部消します。よろしいですか？"))return;
-  const b=$("hardReset");b.disabled=true;b.textContent="完全リセット中…";showAction("完全リセット中…","wait");
-  try{
-    const d=await post("/api/control/hard-reset",{});
-    if(!d.ok){showAction("完全リセットできません："+(d.reason||d.http),"err");return;}
-    boardKey="";selectedSlugs.clear();renderBoard([]);renderResults([]);
-    $("selected").textContent="選択中 0場";$("selectedTop").textContent="選択中 0場";
-    $("checked").textContent="0";$("star").textContent="0";$("match").textContent="0";$("fill").style.width="0%";
-    showAction("完全リセット完了","ok");await update();
-  }catch(e){showAction("完全リセットで通信エラー","err");}
-  finally{b.disabled=false;b.textContent="完全リセット";}
-};
-
-tickClock();setInterval(tickClock,1000);update();setInterval(update,1200);
+$("stopBtn").onclick=async()=>{await post("/api/control/stop",{})};
+setInterval(update,1500);
+update();
 </script>
 </body>
 </html>

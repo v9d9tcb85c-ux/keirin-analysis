@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_from_directory
+﻿from flask import Flask, jsonify, request, send_from_directory
 from pathlib import Path
 from threading import Lock
 import os, time, uuid
@@ -19,6 +19,7 @@ state = {
     "detail": "",
     "venues_info": [],
     "matches": [],
+    "skipped": [],
     "errors": [],
     "counters": {},
     "pending_command": None,
@@ -103,12 +104,50 @@ def load_board():
             "detail": "PC側の取得エンジンが開始するのを待っています。",
             "venues_info": [],
             "matches": [],
+            "skipped": [],
             "errors": [],
             "counters": {},
             "stop_requested": False,
             "retry_preserve": False,
         })
     return jsonify(ok=True, command_id=cid)
+
+@app.post("/api/control/auto-search")
+def auto_search():
+    """取得済み開催場からF2だけを自動選択して検索する。"""
+    if not control_ok():
+        return jsonify(ok=False, reason="unauthorized"), 401
+    s = public_state()
+    if not s["agent_online"]:
+        return jsonify(ok=False, reason="pc_offline"), 409
+    if s["running"]:
+        return jsonify(ok=False, reason="running"), 409
+
+    selected = [
+        x.get("slug") for x in s.get("venues_info", [])
+        if x.get("grade") == "F2" and x.get("slug")
+    ]
+    if not selected:
+        return jsonify(ok=False, reason="no_f2_venues"), 400
+
+    cid = enqueue("search_selected", {"selected": selected})
+    if not cid:
+        return jsonify(ok=False, reason="command_pending"), 409
+    with lock:
+        mark_control("自動検索")
+        state.update({
+            "running": True,
+            "phase": "queued",
+            "current": "F2開催を自動検索中",
+            "detail": f"今日のF2 {len(selected)}場を自動選択してPC側で検索します。",
+            "matches": [],
+            "skipped": [],
+            "errors": [],
+            "counters": {},
+            "stop_requested": False,
+            "retry_preserve": False,
+        })
+    return jsonify(ok=True, command_id=cid, selected=selected)
 
 @app.post("/api/control/search")
 def search():
@@ -146,7 +185,7 @@ def search():
         # 通常検索は新規なのでリセット。
         # 再検索は「押した瞬間」に前回表示を消さない。
         if not preserve_display:
-            next_state.update({"matches": [], "errors": [], "counters": {}})
+            next_state.update({"matches": [], "skipped": [], "errors": [], "counters": {}})
         state.update(next_state)
     return jsonify(ok=True, command_id=cid)
 
@@ -198,6 +237,7 @@ def reset():
             "current": "終了しました",
             "detail": "検索結果をリセットしました。F2チェックはそのまま残しています。" if has_venues else "検索状態をリセットしました。",
             "matches": [],
+            "skipped": [],
             "errors": [],
             "counters": {},
             "pending_command": None,
@@ -226,6 +266,7 @@ def hard_reset():
             "detail": "",
             "venues_info": [],
             "matches": [],
+            "skipped": [],
             "errors": [],
             "counters": {},
             "pending_command": None,
@@ -267,10 +308,10 @@ def agent_progress():
             state["retry_preserve"] = False
             preserve = False
 
-        for k in ("phase","running","current","detail","venues_info","matches","errors","counters"):
+        for k in ("phase","running","current","detail","venues_info","matches","skipped","errors","counters"):
             if k not in data:
                 continue
-            if preserve and k in ("matches","errors","counters"):
+            if preserve and k in ("matches","skipped","errors","counters"):
                 continue
             state[k] = data[k]
 
@@ -284,7 +325,7 @@ def agent_finish():
     data = request.get_json(silent=True) or {}
     with lock:
         state["agent_last_seen"] = now()
-        for k in ("phase","current","detail","venues_info","matches","errors","counters"):
+        for k in ("phase","current","detail","venues_info","matches","skipped","errors","counters"):
             if k in data:
                 state[k] = data[k]
         state["running"] = False
