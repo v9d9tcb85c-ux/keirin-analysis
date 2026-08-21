@@ -172,8 +172,189 @@ border-color:#29405f!important;box-shadow:inset 0 0 70px rgba(15,70,190,.12),0 1
 }
 </style>
 
+
+<style id="responsive-complete-ui">
+:root{
+  --bg:#020815;--panel:#071426;--panel2:#0a1830;--line:#213956;
+  --cyan:#22d5ff;--blue:#288cff;--purple:#7d3cff;--gold:#ffd24c;--green:#2ee99a;
+}
+html{scroll-behavior:smooth}
+body{background:
+  radial-gradient(900px 480px at 78% -8%,rgba(58,78,255,.18),transparent 65%),
+  linear-gradient(180deg,#020713,#051020 55%,#020713)!important;
+  min-height:100vh}
+.appShell{display:flex;min-height:100vh}
+.appMain{flex:1;min-width:0}
+main{max-width:1320px!important;margin:0 auto!important;padding:20px 28px 110px!important}
+
+/* PC サイドナビ */
+.sideNav{
+  width:94px;flex:0 0 94px;position:sticky;top:0;height:100vh;z-index:50;
+  background:linear-gradient(180deg,#020713,#061226 55%,#020713);
+  border-right:1px solid #18334e;box-shadow:14px 0 38px rgba(0,0,0,.34);
+  display:flex;flex-direction:column;align-items:center;padding:18px 9px;gap:10px
+}
+.navLogo{
+  width:64px;height:64px;border:1px solid #1d4463;border-radius:16px;display:grid;place-items:center;
+  font-weight:1000;font-size:25px;letter-spacing:-2px;
+  background:linear-gradient(145deg,#12314b,#071326);
+  color:#7cff29;text-shadow:0 0 18px #66ff22aa;margin-bottom:8px
+}
+.navBtn{
+  width:72px;min-height:72px;border:1px solid transparent;border-radius:14px;background:transparent;color:#b6c6d8;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  text-decoration:none;font-size:11px;font-weight:800;cursor:pointer
+}
+.navBtn .ico{font-size:23px;line-height:1}
+.navBtn:hover,.navBtn.active{
+  color:#33d7ff;border-color:#154c72;background:linear-gradient(180deg,#0a3153,#07172b);
+  box-shadow:inset 0 0 24px rgba(29,174,255,.12),0 0 20px rgba(36,151,255,.08)
+}
+.navSpacer{flex:1}
+.connectionBadge{
+  width:72px;border:1px solid #18445a;border-radius:12px;padding:10px 4px;text-align:center;
+  color:#32e990;font-size:10px;font-weight:900;background:#041321
+}
+
+/* ヒーローを完成形へ */
+.hero{
+  min-height:300px!important;border-radius:22px!important;overflow:hidden!important;
+  border:1px solid #29456c!important;
+  box-shadow:0 20px 70px rgba(0,0,0,.38),inset 0 0 90px rgba(40,90,255,.08)!important;
+}
+.hero::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(circle at 76% 36%,rgba(47,142,255,.32),transparent 19%),
+    radial-gradient(circle at 86% 48%,rgba(135,51,255,.22),transparent 23%);
+  mix-blend-mode:screen
+}
+.hero h1{
+  font-size:42px!important;letter-spacing:.01em!important;
+  text-shadow:0 0 26px rgba(73,142,255,.22)
+}
+.heroLabel{
+  color:#ffe07a!important;font-weight:900!important;letter-spacing:.08em
+}
+.count b{
+  background:linear-gradient(180deg,#fff8cf 0%,#ffd458 36%,#f3a600 100%)!important;
+  -webkit-background-clip:text!important;color:transparent!important;
+  text-shadow:0 0 26px rgba(255,189,41,.22)
+}
+
+/* 条件バー */
+.chips{
+  border:1px solid #213d5d!important;background:linear-gradient(180deg,rgba(7,20,39,.96),rgba(5,15,29,.96))!important;
+  border-radius:16px!important;padding:11px 14px!important;gap:10px!important
+}
+.chip{border-radius:999px!important;font-weight:900!important}
+.chip:nth-child(2){color:#ffe457!important;border-color:#7c5d00!important;background:#241d00!important}
+.chip:nth-child(3){
+  color:#dce9ff!important;border-color:#733cff!important;
+  background:linear-gradient(180deg,#221345,#10152f)!important;
+  box-shadow:0 0 18px rgba(123,61,255,.22)
+}
+
+/* 金文字の本日の買えるレース */
+.heroTitleGold{
+  margin:18px 0 16px;border:1px solid #805f16;border-radius:18px;min-height:132px;
+  padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:18px;
+  background:
+    radial-gradient(500px 130px at 78% 48%,rgba(46,102,255,.18),transparent 62%),
+    linear-gradient(90deg,#0a0d16 0%,#0b1020 55%,#09152a 100%);
+  box-shadow:inset 0 0 45px rgba(255,183,0,.05)
+}
+.goldTextWrap small{
+  display:block;color:#f0ca65;font-size:14px;font-weight:900;letter-spacing:.08em;margin-bottom:7px
+}
+.goldText{
+  font-size:46px;font-weight:1000;line-height:1;
+  background:linear-gradient(180deg,#fff7c6 0%,#ffd764 32%,#f4a900 68%,#fff0a5 100%);
+  -webkit-background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 11px rgba(255,185,21,.25))
+}
+.raceGlow{
+  flex:0 0 330px;height:92px;border-radius:14px;position:relative;overflow:hidden;
+  background:
+   linear-gradient(120deg,transparent 0 23%,rgba(36,151,255,.18) 24% 34%,transparent 35% 45%,rgba(131,55,255,.22) 46% 60%,transparent 61%),
+   radial-gradient(ellipse at 78% 68%,rgba(34,114,255,.46),transparent 45%),
+   #061126;
+}
+.raceGlow::before{
+  content:"🚴‍♂️  🚴‍♂️  🚴‍♂️  🚴‍♂️";position:absolute;right:10px;top:20px;
+  font-size:37px;letter-spacing:-5px;filter:drop-shadow(0 0 8px #26a7ff)
+}
+.raceGlow::after{
+  content:"";position:absolute;left:0;right:0;bottom:14px;height:3px;
+  background:linear-gradient(90deg,transparent,#23c8ff,#7b3cff,transparent);
+  box-shadow:0 0 16px #3b8dff
+}
+
+/* セクション */
+.progressCard,.race,.sectionCard{
+  background:linear-gradient(180deg,#08172a,#061222)!important;border-color:#223b58!important
+}
+.progressCard{border-left:4px solid #743cff!important}
+.sectionHead h2{font-weight:1000!important}
+
+/* PCで意味のある操作だけ */
+.legacyNav,.bottomNav{display:none!important}
+.mobileNav{display:none}
+
+/* 設定パネル */
+.settingsPanel{
+  display:none;position:fixed;inset:0;z-index:200;background:rgba(0,6,16,.78);backdrop-filter:blur(8px);
+  align-items:center;justify-content:center;padding:20px
+}
+.settingsPanel.open{display:flex}
+.settingsCard{
+  width:min(520px,100%);background:#071426;border:1px solid #285078;border-radius:20px;padding:22px;
+  box-shadow:0 28px 90px rgba(0,0,0,.55)
+}
+.settingsCard h3{margin:0 0 12px;font-size:22px}
+.settingsCard p{color:#9db0c7;line-height:1.7;font-size:13px}
+.settingsClose{width:100%;margin-top:16px;padding:12px;border:1px solid #31547a;border-radius:12px;background:#0b1c31;color:#fff;font-weight:900}
+
+/* スマホ */
+@media(max-width:760px){
+  .appShell{display:block}
+  .sideNav{display:none}
+  .appMain{width:100%}
+  main{padding:12px 12px 92px!important;max-width:none!important}
+  .hero{min-height:250px!important;border-radius:18px!important}
+  .hero h1{font-size:29px!important;max-width:62%}
+  .count b{font-size:74px!important}
+  .chips{display:flex!important;overflow-x:auto!important;flex-wrap:nowrap!important;padding:9px!important;gap:8px!important;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{white-space:nowrap!important;font-size:11px!important;padding:8px 11px!important}
+  .heroTitleGold{min-height:112px;padding:16px 17px;border-radius:16px}
+  .goldText{font-size:31px}
+  .goldTextWrap small{font-size:11px}
+  .raceGlow{flex:0 0 125px;height:74px}
+  .raceGlow::before{font-size:26px;right:-10px;top:20px}
+  .progressCard{padding:16px 12px!important}
+  .steps{gap:0!important}
+  .step b{font-size:10px!important}
+  .circle{width:38px!important;height:38px!important}
+  .race{grid-template-columns:78px minmax(0,1fr)!important;padding:12px!important}
+  .race .bet{grid-column:1/-1!important;margin-top:10px!important}
+  .bib{width:27px;height:26px}
+  .mobileNav{
+    position:fixed;display:grid;grid-template-columns:repeat(4,1fr);left:0;right:0;bottom:0;z-index:80;
+    background:rgba(2,8,18,.97);border-top:1px solid #18324e;backdrop-filter:blur(14px);
+    padding:7px max(8px,env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))
+  }
+  .mNavBtn{
+    min-height:56px;border:0;background:transparent;color:#9db0c6;text-decoration:none;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;font-weight:900
+  }
+  .mNavBtn .ico{font-size:20px}
+  .mNavBtn.active{color:#4fd7ff}
+}
+</style>
+
 </head>
-<body>
+<body><div class="appShell"><aside class="sideNav" aria-label="メインナビ"></aside><div class="appMain">
 <main>
   <div class="top">
     <div class="brand">
@@ -186,10 +367,10 @@ border-color:#29405f!important;box-shadow:inset 0 0 70px rgba(15,70,190,.12),0 1
     </div>
   </div>
 
-  <section class="hero">
+  <section id="home" class="hero">
     <div class="heroTop">
       <div>
-        <div class="heroLabel">本日の該当件数</div>
+        <div class="heroLabel">本日の厳選レース</div>
         <h1>本日の買えるレース</h1>
       </div>
       <div class="count"><b id="matchCount">0</b><span>件</span></div>
@@ -197,13 +378,21 @@ border-color:#29405f!important;box-shadow:inset 0 0 70px rgba(15,70,190,.12),0 1
     <div class="chips">
       <span class="chip blue">F2のみ</span>
       <span class="chip gold">AI予想 ★2</span>
-      <span class="chip">ライン 3.2.2 / 2.3.2 / 2.2.3</span>
-      <span class="chip green">4.3 / 3.4 追加条件</span>
+      <span class="chip">ライン 3.2.2 / 2.3.2 / 2.2.3 / 4.3 / 3.4</span>
+      <span class="chip green">ライン 3.2.2 / 2.3.2 / 2.2.3 / 4.3 / 3.4 / 4.3 / 3.4</span>
       <span class="chip">ガールズ除外</span>
     </div>
   </section>
+<section class="heroTitleGold" aria-label="本日の買えるレース">
+  <div class="goldTextWrap">
+    <small>SMART FINDER SELECT</small>
+    <div class="goldText">本日の買えるレース</div>
+  </div>
+  <div class="raceGlow" aria-hidden="true"></div>
+</section>
 
-  <section class="progressCard">
+
+  <section id="search-status" class="progressCard">
     <div class="progressHead">
       <h2>検索状況</h2>
       <span class="autoBadge">● 自動更新ON</span>
@@ -221,7 +410,7 @@ border-color:#29405f!important;box-shadow:inset 0 0 70px rgba(15,70,190,.12),0 1
   <div class="sectionHead"><h2>今日のF2開催</h2><span>自動選択</span></div>
   <div id="f2Row" class="f2Row"><span class="f2pill">開催場取得待ち</span></div>
 
-  <div class="sectionHead"><h2>該当レース一覧</h2><span id="resultHint">未検索</span></div>
+  <div id="matches" class="sectionHead"><h2>該当レース一覧</h2><span id="resultHint">未検索</span></div>
   <div id="venueNav" class="venueNav"></div>
   <div id="results"><div class="empty">まだ検索していません。</div></div>
   <div id="errors"></div>
@@ -359,5 +548,46 @@ $("retryBtn").onclick=async()=>{const d=await post("/api/control/auto-search",{}
 $("stopBtn").onclick=async()=>{await post("/api/control/stop",{})};
 setInterval(update,1500); update();
 </script>
+</div><nav class="mobileNav" aria-label="スマホナビ"></nav></div>
+<div id="settingsPanel" class="settingsPanel" aria-hidden="true">
+  <div class="settingsCard">
+    <h3>設定</h3>
+    <p>完全自動版では通常操作は不要です。ここは今後「自動検索時刻」など、実際に動く設定だけを追加するための管理画面として使用します。</p>
+    <button class="settingsClose" type="button" onclick="closeSettings()">閉じる</button>
+  </div>
+</div>
+
+
+<script id="responsive-nav-script">
+(function(){
+ const side=document.querySelector('.sideNav');
+ if(side){
+   side.innerHTML=`
+    <div class="navLogo">W</div>
+    <a class="navBtn active" href="#home"><span class="ico">⌂</span><span>ホーム</span></a>
+    <a class="navBtn" href="#search-status"><span class="ico">⌕</span><span>検索状況</span></a>
+    <a class="navBtn" href="#matches"><span class="ico">♕</span><span>該当レース</span></a>
+    <button class="navBtn" type="button" onclick="openSettings()"><span class="ico">⚙</span><span>設定</span></button>
+    <div class="navSpacer"></div>
+    <div class="connectionBadge">● 接続中</div>`;
+ }
+ const mob=document.querySelector('.mobileNav');
+ if(mob){
+   mob.innerHTML=`
+    <a class="mNavBtn active" href="#home"><span class="ico">⌂</span><span>ホーム</span></a>
+    <a class="mNavBtn" href="#search-status"><span class="ico">⌕</span><span>検索状況</span></a>
+    <a class="mNavBtn" href="#matches"><span class="ico">♕</span><span>該当レース</span></a>
+    <button class="mNavBtn" type="button" onclick="openSettings()"><span class="ico">⚙</span><span>設定</span></button>`;
+ }
+ window.openSettings=function(){
+   const p=document.getElementById('settingsPanel'); if(p){p.classList.add('open');p.setAttribute('aria-hidden','false')}
+ };
+ window.closeSettings=function(){
+   const p=document.getElementById('settingsPanel'); if(p){p.classList.remove('open');p.setAttribute('aria-hidden','true')}
+ };
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSettings()});
+})();
+</script>
+
 </body>
 </html>
